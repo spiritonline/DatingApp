@@ -1,9 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'react-native';
-import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import { DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { AuthNavigator } from './src/navigation/AuthNavigator';
+import { AuthProvider } from './src/contexts/AuthContext';
+import { NavigationController } from './src/navigation/NavigationController';
 
 export default function App() {
   const colorScheme = useColorScheme();
@@ -11,10 +12,10 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NavigationContainer theme={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <AuthProvider>
           <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-          <AuthNavigator />
-        </NavigationContainer>
+          <NavigationController />
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

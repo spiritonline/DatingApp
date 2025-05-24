@@ -4,7 +4,10 @@ export type AuthStackParamList = {
   Welcome: undefined;
   SignUp: undefined;
   LogIn: undefined;
-  MainFeed: undefined; // Placeholder for post-auth navigation
+  PersonalInfo: undefined;
+  PhotoUpload: undefined;
+  PromptsSetup: undefined;
+  MainFeed: undefined; // Post-auth navigation
 };
 
 export type AuthNavigationProp = NativeStackNavigationProp<AuthStackParamList>;

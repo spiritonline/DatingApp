@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useColorScheme, View, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { useState, useEffect } from 'react';
+import { useColorScheme, View, Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { signInWithEmailAndPassword } from '@firebase/auth';
 import { auth } from '../services/firebase';
@@ -7,11 +7,14 @@ import { AuthNavigationProp } from '../navigation/types';
 import styled from 'styled-components/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AuthHeader from '../components/auth-components/AuthHeader';
+import { useAuth } from '../contexts/AuthContext';
+import { getUserProfile, isProfileComplete } from '../services/profileService';
 
 export default function LogInScreen() {
   const colorScheme = useColorScheme();
   const navigation = useNavigation<AuthNavigationProp>();
   const isDark = colorScheme === 'dark';
+  const { isAuthenticated, isProfileComplete, isLoading: authLoading } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,6 +23,38 @@ export default function LogInScreen() {
     email: '',
     password: '',
   });
+  
+  // Handle authenticated navigation based on profile completion
+  useEffect(() => {
+    const checkProfileAndNavigate = async () => {
+      if (isAuthenticated) {
+        try {
+          // Get the current user
+          const user = auth.currentUser;
+          if (!user) return;
+          
+          // Get user's profile
+          const profile = await getUserProfile(user.uid);
+          
+          // Determine where to navigate based on profile completion
+          if (profile && profile.profileComplete) {
+            navigation.navigate('MainFeed');
+          } else {
+            // Profile is incomplete, navigate to the first profile setup screen
+            navigation.navigate('PersonalInfo');
+          }
+        } catch (error) {
+          console.error('Error checking profile:', error);
+          // Default to profile setup on error
+          navigation.navigate('PersonalInfo');
+        }
+      }
+    };
+    
+    if (!authLoading && isAuthenticated) {
+      checkProfileAndNavigate();
+    }
+  }, [isAuthenticated, authLoading, navigation]);
 
   const validateForm = () => {
     let isValid = true;
@@ -52,15 +87,15 @@ export default function LogInScreen() {
 
     setIsLoading(true);
     try {
+      // Authenticate with Firebase
       await signInWithEmailAndPassword(auth, email, password);
-      navigation.navigate('MainFeed');
+      // Navigation is handled by the useEffect hook that monitors auth state
     } catch (error: any) {
       console.error('Error logging in:', error);
       Alert.alert(
         'Login Failed',
         error.message || 'Failed to log in. Please check your credentials and try again.'
       );
-    } finally {
       setIsLoading(false);
     }
   };
@@ -74,6 +109,17 @@ export default function LogInScreen() {
     // Implementation would go here in a real app
     Alert.alert('Apple Login', 'Apple Login would be implemented here');
   };
+
+  // Show a loading indicator while authentication state is being determined
+  if (authLoading || (isLoading && isAuthenticated)) {
+    return (
+      <Container isDark={isDark}>
+        <LoadingContainer>
+          <ActivityIndicator size="large" color="#FF6B6B" />
+        </LoadingContainer>
+      </Container>
+    );
+  }
 
   return (
     <Container isDark={isDark}>
@@ -190,6 +236,12 @@ import { ThemeProps } from '../utils/styled-components';
 const Container = styled(SafeAreaView)<ThemeProps>`
   flex: 1;
   background-color: ${(props: ThemeProps) => (props.isDark ? '#121212' : '#ffffff')};
+`;
+
+const LoadingContainer = styled.View`
+  flex: 1;
+  justify-content: center;
+  align-items: center;
 `;
 
 const FormContainer = styled.View`
