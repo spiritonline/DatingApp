@@ -1,0 +1,53 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`MainFeedScreen matches snapshot 1`] = `
+<RNCSafeAreaView
+  edges={
+    {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "additive",
+    }
+  }
+  style={
+    {
+      "backgroundColor": "#fff",
+      "flex": 1,
+    }
+  }
+>
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "flex": 1,
+        "justifyContent": "center",
+        "padding": 20,
+      }
+    }
+  >
+    <Text
+      style={
+        {
+          "fontSize": 24,
+          "fontWeight": "bold",
+          "marginBottom": 10,
+        }
+      }
+    >
+      Main Feed
+    </Text>
+    <Text
+      style={
+        {
+          "color": "#666",
+          "fontSize": 16,
+        }
+      }
+    >
+      Authentication successful!
+    </Text>
+  </View>
+</RNCSafeAreaView>
+`;

@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run linters on staged files and run unit/integration tests related to changes
+npx lint-staged && npm test -- --findRelatedTests --bail
