@@ -282,7 +282,7 @@ const InputContainer = styled.View<{isDark?: boolean}>`
 const InputLabel = styled.Text<{isDark?: boolean}>`
   font-size: 16px;
   margin-bottom: 8px;
-  color: ${(props) => (props.isDark ? '#e0e0e0' : '#333')};
+  color: ${(props: {isDark?: boolean}) => (props.isDark ? '#e0e0e0' : '#333')};
 `;
 
 const Input = styled.TextInput<{isDark?: boolean}>`
@@ -356,7 +356,7 @@ const CheckboxInner = styled.View`
 const CheckboxLabel = styled.Text<{isDark?: boolean}>`
   flex: 1;
   font-size: 14px;
-  color: ${(props) => (props.isDark ? '#e0e0e0' : '#333')};
+  color: ${(props: {isDark?: boolean}) => (props.isDark ? '#e0e0e0' : '#333')};
 `;
 
 const NextButton = styled.TouchableOpacity<{disabled: boolean}>`

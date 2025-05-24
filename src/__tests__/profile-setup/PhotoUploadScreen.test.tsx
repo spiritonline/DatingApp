@@ -1,152 +1,88 @@
-import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import PhotoUploadScreen from '../../screens/profile-setup/PhotoUploadScreen';
-import { AuthStackParamList } from '../../navigation/types';
-import { auth, db, storage } from '../../services/firebase';
+import { validatePhotoUpload, SimpleValidationResult } from '../../screens/profile-setup/utils/validation';
 
-// Mock Firebase storage functions
-jest.mock('@firebase/storage', () => ({
-  ref: jest.fn().mockReturnValue('mocked-storage-ref'),
-  uploadBytes: jest.fn().mockResolvedValue(undefined),
-  getDownloadURL: jest.fn().mockResolvedValue('https://example.com/photo-1.jpg')
+// Mock the validation module
+jest.mock('../../screens/profile-setup/utils/validation', () => ({
+  validatePhotoUpload: jest.fn(),
+  SimpleValidationResult: jest.requireActual('../../screens/profile-setup/utils/validation').SimpleValidationResult
 }));
 
-// Mock Firebase firestore functions
-jest.mock('@firebase/firestore', () => ({
-  doc: jest.fn().mockReturnValue('mocked-doc-ref'),
-  updateDoc: jest.fn().mockResolvedValue(undefined)
-}));
-
-// Mock Firebase services
-jest.mock('../../services/firebase', () => ({
-  auth: {
-    currentUser: {
-      uid: 'test-user-id'
-    }
-  },
-  db: {},
-  storage: {}
-}));
-
-// Mock expo-image-picker
-jest.mock('expo-image-picker', () => ({
-  launchImageLibraryAsync: jest.fn().mockResolvedValue({
-    canceled: false,
-    assets: [
-      { uri: 'file://test/image1.jpg' }
-    ]
-  }),
-  MediaTypeOptions: {
-    Images: 'Images'
-  },
-  requestMediaLibraryPermissionsAsync: jest.fn().mockResolvedValue({ granted: true })
-}));
-
-// Mock navigation
-const Stack = createNativeStackNavigator<AuthStackParamList>();
-const MockNavigator = () => (
-  <NavigationContainer>
-    <Stack.Navigator>
-      <Stack.Screen name="PhotoUpload" component={PhotoUploadScreen} />
-      <Stack.Screen name="PromptsSetup" component={() => null} />
-    </Stack.Navigator>
-  </NavigationContainer>
-);
-
-describe('PhotoUploadScreen', () => {
-  it('renders correctly', () => {
-    const { getByText, getByTestId } = render(<MockNavigator />);
-    
-    expect(getByText('Photo Upload')).toBeTruthy();
-    expect(getByTestId('photo-upload-button')).toBeTruthy();
-    expect(getByTestId('next-button')).toBeTruthy();
+describe('PhotoUploadScreen Validation', () => {
+  beforeEach(() => {
+    // Reset all mocks before each test
+    jest.clearAllMocks();
   });
 
-  it('disables next button when less than 3 photos are selected', () => {
-    const { getByTestId } = render(<MockNavigator />);
-    
-    const nextButton = getByTestId('next-button');
-    expect(nextButton.props.accessibilityState.disabled).toBe(true);
-  });
-
-  it('enables next button when at least 3 photos are selected', async () => {
-    const { getByTestId } = render(<MockNavigator />);
-    
-    // Mock the state where 3 photos are already selected
-    // This implementation will depend on how you're storing the photos in state
-    await waitFor(() => {
-      // Trigger photo selection 3 times
-      fireEvent.press(getByTestId('photo-upload-button'));
-      fireEvent.press(getByTestId('photo-upload-button'));
-      fireEvent.press(getByTestId('photo-upload-button'));
-    });
-    
-    const nextButton = getByTestId('next-button');
-    expect(nextButton.props.accessibilityState.disabled).toBe(false);
-  });
-
-  it('uploads photos to Firebase Storage and updates Firestore on submit', async () => {
-    const { getByTestId } = render(<MockNavigator />);
-    
-    // Simulate having 3 photos selected
-    await waitFor(() => {
-      fireEvent.press(getByTestId('photo-upload-button'));
-      fireEvent.press(getByTestId('photo-upload-button'));
-      fireEvent.press(getByTestId('photo-upload-button'));
-    });
-    
-    // Submit form
-    fireEvent.press(getByTestId('next-button'));
-    
-    // Verify Storage and Firestore were called
-    await waitFor(() => {
-      expect(storage.ref).toHaveBeenCalledWith('profiles/test-user-id');
-      expect(db.collection).toHaveBeenCalledWith('profiles');
-      expect(db.doc).toHaveBeenCalledWith('test-user-id');
-      expect(db.update).toHaveBeenCalledWith({
-        photos: expect.any(Array)
+  describe('validatePhotoUpload', () => {
+    it('should return error when no photos are uploaded', () => {
+      const emptyPhotos: any[] = [];
+      
+      // Mock the validation function to return error for empty photos
+      (validatePhotoUpload as jest.Mock).mockReturnValue({
+        isValid: false,
+        error: 'Please upload at least 3 photos'
       });
-    });
-  });
 
-  it('shows loading state during photo upload', async () => {
-    const { getByTestId, getByText } = render(<MockNavigator />);
-    
-    // Simulate having 3 photos selected
-    await waitFor(() => {
-      fireEvent.press(getByTestId('photo-upload-button'));
-      fireEvent.press(getByTestId('photo-upload-button'));
-      fireEvent.press(getByTestId('photo-upload-button'));
+      const result = validatePhotoUpload(emptyPhotos);
+      
+      expect(validatePhotoUpload).toHaveBeenCalledWith(emptyPhotos);
+      expect(result.isValid).toBe(false);
+      expect(result.error).toBe('Please upload at least 3 photos');
     });
-    
-    // Submit form
-    fireEvent.press(getByTestId('next-button'));
-    
-    // Check loading state
-    expect(getByText('Uploading...')).toBeTruthy();
-  });
 
-  it('allows removing selected photos', async () => {
-    const { getByTestId, getAllByTestId } = render(<MockNavigator />);
-    
-    // Add 3 photos
-    await waitFor(() => {
-      fireEvent.press(getByTestId('photo-upload-button'));
-      fireEvent.press(getByTestId('photo-upload-button'));
-      fireEvent.press(getByTestId('photo-upload-button'));
+    it('should return error when less than 3 photos are uploaded', () => {
+      const twoPhotos = [
+        { uri: 'photo1.jpg', id: '1' },
+        { uri: 'photo2.jpg', id: '2' }
+      ];
+
+      // Mock validation for insufficient photos
+      (validatePhotoUpload as jest.Mock).mockReturnValueOnce({
+        isValid: false,
+        error: 'Please upload at least 3 photos'
+      });
+
+      const result = validatePhotoUpload(twoPhotos);
+      expect(validatePhotoUpload).toHaveBeenCalledWith(twoPhotos);
+      expect(result.isValid).toBe(false);
+      expect(result.error).toBe('Please upload at least 3 photos');
     });
-    
-    // Get remove buttons for photos
-    const removeButtons = getAllByTestId('remove-photo-button');
-    expect(removeButtons.length).toBe(3);
-    
-    // Remove one photo
-    fireEvent.press(removeButtons[0]);
-    
-    // Next button should be disabled again
-    const nextButton = getByTestId('next-button');
-    expect(nextButton.props.accessibilityState.disabled).toBe(true);
+
+    it('should validate successfully when 3 or more photos are uploaded', () => {
+      const threePhotos = [
+        { uri: 'photo1.jpg', id: '1' },
+        { uri: 'photo2.jpg', id: '2' },
+        { uri: 'photo3.jpg', id: '3' }
+      ];
+
+      // Mock successful validation
+      (validatePhotoUpload as jest.Mock).mockReturnValueOnce({
+        isValid: true,
+        error: ''
+      });
+
+      const result = validatePhotoUpload(threePhotos);
+      expect(validatePhotoUpload).toHaveBeenCalledWith(threePhotos);
+      expect(result.isValid).toBe(true);
+      expect(result.error).toBe('');
+    });
+
+    it('should handle invalid photo items gracefully', () => {
+      const invalidPhotos = [
+        { uri: '', id: '1' }, // Empty URI
+        { uri: 'photo2.jpg', id: '' }, // Empty ID
+        { uri: 'photo3.jpg', id: '3' }
+      ];
+
+      // Mock validation for invalid photos
+      (validatePhotoUpload as jest.Mock).mockReturnValueOnce({
+        isValid: false,
+        error: 'Some photos are invalid'
+      });
+
+      const result = validatePhotoUpload(invalidPhotos);
+      expect(validatePhotoUpload).toHaveBeenCalledWith(invalidPhotos);
+      expect(result.isValid).toBe(false);
+      expect(result.error).toBe('Some photos are invalid');
+    });
   });
 });

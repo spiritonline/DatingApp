@@ -13,11 +13,12 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { auth, db, storage } from '../../services/firebase';
 import { doc, updateDoc, getDoc, setDoc } from '@firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateUserProfile, updateProfileCompletionStatus } from '../../services/profileService';
-import { ref, uploadBytes, getDownloadURL } from '@firebase/storage';
+import { uploadMultipleFiles } from '../../utils/upload-service';
 import { AuthNavigationProp } from '../../navigation/types';
 import styled from 'styled-components/native';
 import { 
@@ -71,7 +72,8 @@ export default function PhotoUploadScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.7, // Reduced quality for iOS compatibility
+        exif: false,  // Disable EXIF to reduce file size
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -116,30 +118,47 @@ export default function PhotoUploadScreen() {
         .filter(photo => !photo.uri.startsWith('file:'))
         .map(photo => photo.uri);
       
-      // Upload new photos to Firebase Storage
+      // Log user info before upload attempt
+      console.log(`Starting upload process for user: ${userId}`);
+      console.log(`Number of new photos to upload: ${newPhotos.length}`);
+            
+      // Upload new photos to Firebase Storage using our specialized upload service
       if (newPhotos.length > 0) {
-        const newPhotoUrls = await Promise.all(
-          newPhotos.map(async (photo, index) => {
-            const timestamp = Date.now();
-            const storageRef = ref(storage, `profiles/${userId}/photo-${timestamp}-${index}`);
-            
-            // Upload the file
-            const response = await fetch(photo.uri);
-            const blob = await response.blob();
-            await uploadBytes(storageRef, blob);
-            
-            // Get download URL
-            const downloadURL = await getDownloadURL(storageRef);
-            
-            // Update progress
-            setUploadProgress(((index + 1) / newPhotos.length) * 100);
-            
-            return downloadURL;
-          })
-        );
-        
-        // Combine existing and new photo URLs
-        photoUrls = [...photoUrls, ...newPhotoUrls];
+        try {
+          // Enhanced approach for photo uploads with retries
+          const uploadedUrls = await uploadMultipleFiles(
+            newPhotos.map(photo => photo.uri),
+            {
+              userId,
+              path: 'profiles',
+              maxRetries: 3, // Allow more retries for reliability
+              metadata: {
+                userId,
+                timestamp: Date.now().toString(),
+                platform: Platform.OS,
+                appVersion: '1.0.0', // Add app version for tracking
+                totalPhotos: String(photos.length)
+              }
+            },
+            (progress) => setUploadProgress(progress)
+          );
+          
+          photoUrls = [...photoUrls, ...uploadedUrls];
+        } catch (error: any) {
+          console.error('Error uploading photos:', error);
+          console.error('Error details:', error);
+          
+          // Show more helpful error message to the user
+          const errorMessage = error?.message || 'Unknown error occurred';
+          Alert.alert(
+            'Upload Failed', 
+            `There was a problem uploading your photos: ${errorMessage.includes('storage/unknown') ? 
+              'The server rejected the upload. Please try selecting a different photo or try again later.' : 
+              errorMessage}`
+          );
+          setIsLoading(false);
+          return;
+        }
       }
 
       // Update profile in Firestore
@@ -153,11 +172,45 @@ export default function PhotoUploadScreen() {
       // Navigate to next screen
       navigation.navigate('PromptsSetup');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      console.error('Error uploading photos:', error);
+      // Enhanced error handling for Firebase Storage errors
+      let errorMessage = 'Unknown error occurred';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error('Error uploading photos:', error);
+        
+        // Check for Firebase Storage specific errors
+        if (error.message.includes('storage/') && error.message.includes('Firebase storage:')) {
+          const errorCode = error.message.match(/storage\/([\w-]+)/);
+          
+          if (errorCode && errorCode[1]) {
+            switch(errorCode[1]) {
+              case 'unauthorized':
+                errorMessage = 'You don\'t have permission to upload to this location. Please check your Firebase Storage rules.';
+                break;
+              case 'quota-exceeded':
+                errorMessage = 'Storage quota exceeded. Please try with smaller images or contact support.';
+                break;
+              case 'invalid-format':
+                errorMessage = 'The image format is not supported. Please use JPEG or PNG images.';
+                break;
+              case 'canceled':
+                errorMessage = 'Upload was canceled. Please try again.';
+                break;
+              case 'unknown':
+                errorMessage = 'There was an issue uploading your photo. Please try again with a different photo or restart the app.';
+                break;
+              default:
+                errorMessage = `Storage error (${errorCode[1]}). Please try again or use a different photo.`;
+            }
+          }
+        }
+      }
+      
+      console.error('Error details:', error);
       Alert.alert(
-        'Error',
-        `Failed to upload photos: ${errorMessage}`
+        'Upload Error',
+        errorMessage
       );
     } finally {
       setIsLoading(false);
