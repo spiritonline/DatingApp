@@ -9,12 +9,12 @@ import { getStorage } from '@firebase/storage';
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID"
+  authDomain: "datingappbackend-2c3d7.firebaseapp.com",
+  projectId: "datingappbackend-2c3d7",
+  storageBucket: "datingappbackend-2c3d7.firebasestorage.app",
+  messagingSenderId: "37726804970",
+  appId: "1:37726804970:web:fa0555dce9e97bcce5b093",
+  measurementId: "G-HGJQB6W6P3"
 };
 
 // Initialize Firebase
