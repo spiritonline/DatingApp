@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useColorScheme, View, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword } from '@firebase/auth';
 import { auth } from '../services/firebase';
 import { AuthNavigationProp } from '../navigation/types';
 import styled from 'styled-components/native';
