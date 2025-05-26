@@ -20,6 +20,12 @@ export interface ChatMessage {
   type: 'text' | 'image' | 'video' | 'audio';
   createdAt: any;
   isRead?: boolean;
+  status?: 'sending' | 'sent' | 'delivered' | 'read';
+  replyTo?: {
+    id: string;
+    content: string;
+    senderId: string;
+  };
 }
 
 export interface ChatPreview {
@@ -89,6 +95,7 @@ export async function initializeTestChat(): Promise<string | null> {
         type: 'text',
         createdAt: serverTimestamp(),
         isRead: true,
+        status: 'sent',
       });
       
       console.log('Test chat initialized successfully');
@@ -155,34 +162,59 @@ export async function getUserChats(): Promise<ChatPreview[]> {
 // Send message to a chat
 export async function sendMessage(
   chatId: string, 
-  content: string, 
-  type: 'text' | 'image' | 'video' | 'audio' = 'text'
+  messageData: {
+    content: string;
+    senderId: string;
+    type: 'text' | 'image' | 'video' | 'audio';
+    replyTo?: {
+      id: string;
+      content: string;
+      senderId: string;
+    };
+  }
 ): Promise<boolean> {
   try {
     const currentUserId = auth.currentUser?.uid;
-    if (!currentUserId || !chatId || !content.trim()) {
+    if (!currentUserId || !chatId || !messageData.content || typeof messageData.content !== 'string' || !messageData.content.trim()) {
+      console.error('[chatService] Invalid message data:', messageData);
       return false;
     }
     
     const messagesRef = collection(db, `chats/${chatId}/messages`);
     const chatRef = doc(db, 'chats', chatId);
     
-    // Add new message
-    const messageRef = await addDoc(messagesRef, {
+    // Use replyTo data directly from messageData if it exists
+    const { replyTo } = messageData;
+
+    // Create final message data object with proper structure
+    const finalMessageData = {
       senderId: currentUserId,
-      content: content.trim(),
-      type,
+      content: messageData.content.trim(),
+      type: messageData.type || 'text',
       createdAt: serverTimestamp(),
       isRead: false,
+      status: 'sending',
+      ...(replyTo ? { replyTo } : {})
+    };
+    
+    console.log('[chatService] Creating message with data:', JSON.stringify(finalMessageData));
+    
+    // Create new message document
+    const messageRef = await addDoc(messagesRef, finalMessageData);
+    
+    // Update message with 'sent' status
+    await updateDoc(messageRef, {
+      status: 'sent',
     });
     
-    // Update chat with last message info
+    // Update chat with last message info, including reply data if present
     await updateDoc(chatRef, {
       lastMessage: {
-        content: content.trim(),
+        content: messageData.content.trim(),
         senderId: currentUserId,
         timestamp: serverTimestamp(),
-        type,
+        type: messageData.type || 'text',
+        ...(replyTo ? { replyTo } : {}),
       },
       updatedAt: serverTimestamp(),
     });
@@ -207,14 +239,33 @@ export function subscribeToMessages(
     
     snapshot.forEach((doc) => {
       const data = doc.data();
-      messages.push({
+      
+      // Check if reply data exists and log it for debugging
+      if (data.replyTo) {
+        console.log(`[chatService] Message ${doc.id} has reply data:`, JSON.stringify(data.replyTo));
+      }
+      
+      // Create properly structured message object
+      const message: ChatMessage = {
         id: doc.id,
         senderId: data.senderId,
         content: data.content,
         type: data.type || 'text',
         createdAt: data.createdAt,
         isRead: data.isRead || false,
-      });
+        status: data.status || 'sent',
+      };
+      
+      // Only add replyTo if it exists in the data
+      if (data.replyTo && typeof data.replyTo === 'object') {
+        message.replyTo = {
+          id: data.replyTo.id,
+          content: data.replyTo.content,
+          senderId: data.replyTo.senderId
+        };
+      }
+      
+      messages.push(message);
     });
     
     callback(messages);
@@ -245,13 +296,46 @@ export async function markMessagesAsRead(chatId: string): Promise<boolean> {
     
     const batch = writeBatch(db);
     unreadSnapshot.forEach((messageDoc) => {
-      batch.update(messageDoc.ref, { isRead: true });
+      batch.update(messageDoc.ref, { 
+        isRead: true,
+        status: 'read'
+      });
     });
     
     await batch.commit();
     return true;
   } catch (error) {
     console.error('Error marking messages as read:', error);
+    return false;
+  }
+}
+
+// Mark messages as delivered
+export async function markMessagesAsDelivered(chatId: string): Promise<boolean> {
+  try {
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId || !chatId) {
+      return false;
+    }
+    
+    const messagesRef = collection(db, `chats/${chatId}/messages`);
+    const undeliveredMessagesQuery = query(
+      messagesRef, 
+      where('senderId', '!=', currentUserId),
+      where('status', '==', 'sent')
+    );
+    
+    const undeliveredSnapshot = await getDocs(undeliveredMessagesQuery);
+    
+    const batch = writeBatch(db);
+    undeliveredSnapshot.forEach((messageDoc) => {
+      batch.update(messageDoc.ref, { status: 'delivered' });
+    });
+    
+    await batch.commit();
+    return true;
+  } catch (error) {
+    console.error('Error marking messages as delivered:', error);
     return false;
   }
 }

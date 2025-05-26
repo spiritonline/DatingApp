@@ -1,10 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
-  View, 
-  Text, 
   FlatList, 
-  TextInput, 
-  TouchableOpacity, 
   KeyboardAvoidingView, 
   Platform, 
   ActivityIndicator,
@@ -13,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { db, auth } from '../services/firebase';
+import { auth } from '../services/firebase';
 import { AuthStackParamList } from '../navigation/types';
 import styled from 'styled-components/native';
 import { ThemeProps } from '../utils/styled-components';
@@ -22,7 +18,6 @@ import {
   subscribeToMessages, 
   markMessagesAsRead, 
   isTestUser, 
-  ChatMessage as ChatMessageType,
   cleanupTestChat
 } from '../services/chatService';
 
@@ -33,7 +28,7 @@ interface Message {
   senderId: string;
   content: string;
   type: 'text' | 'image' | 'video' | 'audio';
-  createdAt: any;
+  createdAt: Date | { toDate: () => Date } | number;
   isRead?: boolean;
 }
 
@@ -62,7 +57,7 @@ export default function ChatConversationScreen() {
     setIsTestChatScreen(isTest);
     
     // Mark messages as read when conversation is opened
-    markMessagesAsRead(chatId).catch(error => {
+    void markMessagesAsRead(chatId).catch(error => {
       console.error('Error marking messages as read:', error);
     });
     
@@ -79,8 +74,8 @@ export default function ChatConversationScreen() {
       }
     });
     
-    return () => unsubscribe();
-  }, [chatId, currentUser?.uid]);
+    return unsubscribe;
+  }, [chatId, currentUser]);
   
   // Send a message
   const sendMessage = async () => {
@@ -104,10 +99,18 @@ export default function ChatConversationScreen() {
   };
   
   // Format timestamp
-  const formatTime = (timestamp: any) => {
+  const formatTime = (timestamp: Date | { toDate: () => Date } | number) => {
     if (!timestamp) return '';
     
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    let date: Date;
+    if (typeof timestamp === 'object' && 'toDate' in timestamp) {
+      date = timestamp.toDate();
+    } else if (timestamp instanceof Date) {
+      date = timestamp;
+    } else {
+      date = new Date(timestamp);
+    }
+    
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
   
@@ -277,7 +280,7 @@ const HeaderContainer = styled.View`
   justify-content: space-between;
   padding: 16px;
   border-bottom-width: 1px;
-  border-bottom-color: ${(props: any) => props.theme?.isDark ? '#333333' : '#EEEEEE'};
+  border-bottom-color: ${(props: ThemeProps) => props.isDark ? '#333333' : '#EEEEEE'};
 `;
 
 const HeaderContent = styled.View`
