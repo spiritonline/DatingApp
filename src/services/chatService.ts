@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, setDoc, query, where, getDocs, orderBy, addDoc, serverTimestamp, updateDoc, onSnapshot, writeBatch } from '@firebase/firestore';
+import { collection, doc, getDoc, setDoc, query, where, getDocs, orderBy, addDoc, serverTimestamp, updateDoc, onSnapshot, writeBatch, Timestamp } from '@firebase/firestore';
 import { db, auth } from './firebase';
 
 // Test user UIDs as defined in the requirements
@@ -27,6 +27,7 @@ export interface ChatMessage {
     senderId: string;
   };
   participantNames?: Record<string, string>; // Added to ensure consistency with ChatPreview
+  reactions?: Record<string, string[]>;
 }
 
 export interface ChatPreview {
@@ -253,6 +254,7 @@ export function subscribeToMessages(
         senderId: data.senderId,
         content: data.content,
         type: data.type || 'text',
+        reactions: data.reactions || {},
         createdAt: data.createdAt,
         isRead: data.isRead || false,
         status: data.status || 'sent',
@@ -338,6 +340,60 @@ export async function markMessagesAsDelivered(chatId: string): Promise<boolean> 
     return true;
   } catch (error) {
     console.error('Error marking messages as delivered:', error);
+    return false;
+  }
+}
+
+// Toggle reaction on a message
+export async function toggleReactionOnMessage(
+  chatId: string,
+  messageId: string,
+  emoji: string,
+  userId: string
+): Promise<boolean> {
+  try {
+    if (!chatId || !messageId || !emoji || !userId) {
+      console.error('Invalid parameters for toggleReactionOnMessage');
+      return false;
+    }
+
+    const messageRef = doc(db, `chats/${chatId}/messages/${messageId}`);
+    const messageDoc = await getDoc(messageRef);
+
+    if (!messageDoc.exists()) {
+      console.error('Message not found');
+      return false;
+    }
+
+    const messageData = messageDoc.data() as ChatMessage;
+    const reactions = messageData.reactions || {};
+
+    // Remove user from any other existing reactions by them
+    Object.keys(reactions).forEach(existingEmoji => {
+      if (reactions[existingEmoji]) {
+        reactions[existingEmoji] = reactions[existingEmoji].filter(uid => uid !== userId);
+        if (reactions[existingEmoji].length === 0) {
+          delete reactions[existingEmoji];
+        }
+      }
+    });
+
+    // Add or remove the new reaction
+    if (reactions[emoji] && reactions[emoji].includes(userId)) {
+      // User already reacted with this emoji, remove it
+      reactions[emoji] = reactions[emoji].filter(uid => uid !== userId);
+      if (reactions[emoji].length === 0) {
+        delete reactions[emoji];
+      }
+    } else {
+      // Add new reaction or replace old one
+      reactions[emoji] = [...(reactions[emoji] || []), userId];
+    }
+
+    await updateDoc(messageRef, { reactions });
+    return true;
+  } catch (error) {
+    console.error('Error toggling reaction on message:', error);
     return false;
   }
 }

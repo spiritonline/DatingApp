@@ -7,11 +7,14 @@ import {
   Platform, 
   ActivityIndicator,
   Alert,
-  View
+  View,
+  Modal,
+  Pressable,
+  GestureResponderEvent
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { Swipeable } from 'react-native-gesture-handler';
+import { Swipeable, TouchableOpacity as GestureTouchableOpacity } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { auth } from '../services/firebase';
 import { AuthStackParamList } from '../navigation/types';
@@ -22,8 +25,10 @@ import {
   sendMessage as sendChatMessage, 
   subscribeToMessages, 
   markMessagesAsRead, 
-  isTestUser, 
-  cleanupTestChat
+  isTestUser,
+  cleanupTestChat,
+  toggleReactionOnMessage,
+  ChatMessage as ChatServiceMessage, // Renaming to avoid conflict
 } from '../services/chatService';
 
 // Constants
@@ -44,6 +49,7 @@ interface Message {
     content: string;
     senderId: string;
   };
+  reactions?: Record<string, string[]>; // emoji: [userId1, userId2]
 }
 
 export default function ChatConversationScreen() {
@@ -58,11 +64,19 @@ export default function ChatConversationScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isTestChatScreen, setIsTestChatScreen] = useState(false);
   
+  // Reaction state
+  const [reactionModalVisible, setReactionModalVisible] = useState(false);
+  const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Message | null>(null);
+  const [reactionModalPosition, setReactionModalPosition] = useState({ x: 0, y: 0 });
+  const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
+  // Using MutableRefObject to avoid type errors with refs
+  const messageRefs = useRef<Record<string, View | null>>({});
   const currentUser = auth.currentUser;
 
   // Animation for reply panel
@@ -92,7 +106,10 @@ export default function ChatConversationScreen() {
     
     // Subscribe to messages using the chat service
     const unsubscribe = subscribeToMessages(chatId, (chatMessages) => {
-      setMessages(chatMessages);
+      const formattedMessages = chatMessages.map(msg => ({
+        ...msg
+      } as Message));
+      setMessages(formattedMessages);
       setIsLoading(false);
       
       // Scroll to bottom on new messages
@@ -251,6 +268,46 @@ export default function ChatConversationScreen() {
     return () => clearTimeout(timer);
   }, [highlightedMessageId]);
 
+  const handleLongPressMessage = (message: Message, event?: GestureResponderEvent) => {
+    // Add safety check for event parameter
+    if (!event || !event.nativeEvent) {
+      // Default position if event is not available
+      setReactionModalPosition({ x: 0, y: 250 });
+      setSelectedMessageForReaction(message);
+      setReactionModalVisible(true);
+      return;
+    }
+    
+    const { pageY } = event.nativeEvent;
+    // Try to get message position using its ref for more accuracy if available
+    const messageView = messageRefs.current[message.id];
+    if (messageView) {
+      messageView.measure((_x, _y, _width, _height, _pageX, pageYOnScreen) => {
+        setReactionModalPosition({ x: 0, y: pageYOnScreen - 70 }); // Position above the message
+      });
+    } else {
+      setReactionModalPosition({ x: 0, y: pageY - 100 }); // Fallback using event Y
+    }
+
+    setSelectedMessageForReaction(message);
+    setReactionModalVisible(true);
+    // Optional: Haptic feedback
+    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const handleSelectReaction = async (emoji: string) => {
+    if (!selectedMessageForReaction || !currentUser) return;
+    setReactionModalVisible(false);
+    try {
+      await toggleReactionOnMessage(chatId, selectedMessageForReaction.id, emoji, currentUser.uid);
+    } catch (error) {
+      console.error("Error toggling reaction:", error);
+      Alert.alert("Error", "Could not apply reaction.");
+    }
+    setSelectedMessageForReaction(null);
+  };
+
+
 
   const getDisplayNameForReply = (senderId: string) => {
     return senderId === currentUser?.uid ? "You" : partnerName;
@@ -330,40 +387,70 @@ export default function ChatConversationScreen() {
                 return (
                   <Swipeable
                     ref={(ref) => {
-                      if (ref) swipeableRefs.current[item.id] = ref;
+                      swipeableRefs.current[item.id] = ref;
                     }}
                     renderLeftActions={renderLeftActions}
                     onSwipeableOpen={() => handleSwipeReply(item)}
                     overshootLeft={false} // Prevent overswiping left for reply icon
                     friction={1.5}
                   >
-                    <MessageContainer 
-                      isCurrentUser={isCurrentUser}
-                      testID={isCurrentUser ? 'sent-message' : 'received-message'}
+                    <GestureTouchableOpacity
+                      // Using type assertion to fix the TypeScript error
+                      onLongPress={((event?: GestureResponderEvent) => {
+                        handleLongPressMessage(item, event);
+                      }) as unknown as ((event: GestureResponderEvent) => void) & (() => void)}
+                      delayLongPress={300}
+                      activeOpacity={0.8}
                     >
-                      <MessageBubble isDark={isDark} isCurrentUser={isCurrentUser} isHighlighted={isHighlighted}>
-                        {item.replyTo && (
-                          <ReplyContextContainer
-                            onPress={() => handleReplyContextTap(item.replyTo!.id)}
-                            isCurrentUser={isCurrentUser}
-                            isDark={isDark}
-                          >
-                            <ReplyContextSender isDark={isDark} isCurrentUser={isCurrentUser}>
-                              {getDisplayNameForReply(item.replyTo.senderId)}
-                            </ReplyContextSender>
-                            <ReplyContextText isDark={isDark} isCurrentUser={isCurrentUser}>
-                              {truncateText(item.replyTo.content, REPLY_PREVIEW_MAX_LENGTH)}
-                            </ReplyContextText>
-                          </ReplyContextContainer>
-                        )}
-                        <MessageText isDark={isDark} isCurrentUser={isCurrentUser}>
-                          {item.content}
-                        </MessageText>
-                        <MessageTime isDark={isDark} isCurrentUser={isCurrentUser}>
-                          {formatTime(item.createdAt)}
-                        </MessageTime>
-                      </MessageBubble>
-                    </MessageContainer>
+                      <View 
+                        // Simply assign the ref without returning anything
+                        ref={(ref: View | null) => { 
+                          if (ref) messageRefs.current[item.id] = ref; 
+                        }}>
+                      
+                        <MessageContainer 
+                          isCurrentUser={isCurrentUser}
+                          testID={isCurrentUser ? 'sent-message' : 'received-message'}
+                        >
+                          <MessageBubble isDark={isDark} isCurrentUser={isCurrentUser} isHighlighted={isHighlighted}>
+                            {item.replyTo && (
+                              <ReplyContextContainer
+                                onPress={() => handleReplyContextTap(item.replyTo!.id)}
+                                isCurrentUser={isCurrentUser}
+                                isDark={isDark}
+                              >
+                                <ReplyContextSender isDark={isDark} isCurrentUser={isCurrentUser}>
+                                  {getDisplayNameForReply(item.replyTo.senderId)}
+                                </ReplyContextSender>
+                                <ReplyContextText isDark={isDark} isCurrentUser={isCurrentUser}>
+                                  {truncateText(item.replyTo.content, REPLY_PREVIEW_MAX_LENGTH)}
+                                </ReplyContextText>
+                              </ReplyContextContainer>
+                            )}
+                            <MessageText isDark={isDark} isCurrentUser={isCurrentUser}>
+                              {item.content}
+                            </MessageText>
+                            <MessageTime isDark={isDark} isCurrentUser={isCurrentUser}>
+                              {formatTime(item.createdAt)}
+                            </MessageTime>
+                            {item.reactions && Object.keys(item.reactions).length > 0 && (
+                              <ReactionsContainer>
+                                {Object.entries(item.reactions || {}).map(([emoji, userIds]) => {
+                                  // Properly type userIds as string[] to avoid 'unknown' type errors
+                                  const users = userIds as string[];
+                                  return users && users.length > 0 ? (
+                                    <ReactionPill key={emoji}>
+                                      <ReactionEmoji>{emoji}</ReactionEmoji>
+                                      <ReactionCount>{users.length}</ReactionCount>
+                                    </ReactionPill>
+                                  ) : null;
+                                })}
+                              </ReactionsContainer>
+                            )}
+                          </MessageBubble>
+                        </MessageContainer>
+                      </View>
+                    </GestureTouchableOpacity>
                   </Swipeable>
                 );
               }}
@@ -373,19 +460,37 @@ export default function ChatConversationScreen() {
         </MessagesContainer>
         <Animated.View style={animatedReplyPanelStyle}>
             {replyToMessage && (
-              <ReplyPreviewPanel isDark={isDark}>
-                <ReplyPreviewContent>
-                  <ReplyPreviewSender isDark={isDark}>
-                    Replying to {getDisplayNameForReply(replyToMessage.senderId)}
-                  </ReplyPreviewSender>
-                  <ReplyPreviewText isDark={isDark}>
-                    {truncateText(replyToMessage.content, REPLY_PREVIEW_MAX_LENGTH)}
-                  </ReplyPreviewText>
-                </ReplyPreviewContent>
-                <CloseReplyButton onPress={() => setReplyToMessage(null)}>
-                  <CloseReplyButtonText isDark={isDark}>✕</CloseReplyButtonText>
-                </CloseReplyButton>
-              </ReplyPreviewPanel>
+              <View style={{ 
+                padding: 8, 
+                backgroundColor: isDark ? '#2A2A2A' : '#EFEFEF',
+                borderBottomWidth: 1,
+                borderBottomColor: isDark ? '#444444' : '#DDDDDD',
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ 
+                    fontSize: 13, 
+                    fontWeight: 'bold', 
+                    color: isDark ? '#BBBBBB' : '#555555'
+                  }}>
+                    {replyToMessage ? getDisplayNameForReply(replyToMessage.senderId) : ''}
+                  </Text>
+                  <Text style={{ 
+                    fontSize: 13, 
+                    color: isDark ? '#AAAAAA' : '#666666'
+                  }}>
+                    {replyToMessage ? truncateText(replyToMessage.content, REPLY_PREVIEW_MAX_LENGTH) : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity style={{ padding: 8 }} onPress={() => setReplyToMessage(null)}>
+                  <Text style={{ 
+                    fontSize: 18, 
+                    color: isDark ? '#AAAAAA' : '#666666'
+                  }}>×</Text>
+                </TouchableOpacity>
+              </View>
             )}
         </Animated.View>
         <InputOuterContainer>
@@ -411,6 +516,48 @@ export default function ChatConversationScreen() {
         </InputContainer>
         </InputOuterContainer>
       </KeyboardAvoidingView>
+
+      <Modal
+        transparent
+        visible={reactionModalVisible}
+        onRequestClose={() => setReactionModalVisible(false)}
+        animationType="fade"
+      >
+        <Pressable 
+          style={{ 
+            flex: 1, 
+            backgroundColor: 'rgba(0,0,0,0.1)' 
+          }} 
+          onPress={() => setReactionModalVisible(false)}
+        >
+          <Animated.View 
+            style={{
+              position: 'absolute',
+              flexDirection: 'row',
+              padding: 8,
+              borderRadius: 20,
+              alignSelf: 'center',
+              elevation: 5,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.25,
+              shadowRadius: 3.84,
+              top: reactionModalPosition.y, 
+              backgroundColor: isDark ? '#333' : '#fff'
+            }}
+          >
+            {EMOJI_REACTIONS.map(emoji => (
+              <TouchableOpacity 
+                key={emoji} 
+                onPress={() => handleSelectReaction(emoji)} 
+                style={{ padding: 8 }}
+              >
+                <Text style={{ fontSize: 24 }}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </Animated.View>
+        </Pressable>
+      </Modal>
     </Container>
   );
 }
@@ -559,42 +706,6 @@ const MessageTime = styled.Text<MessageProps>`
   margin-top: 4px;
 `;
 
-// Removed unused styled components for reply action
-
-const ReplyPreviewPanel = styled.View<ThemeProps>`
-  padding: 8px 16px;
-  background-color: ${(props: ThemeProps) => props.isDark ? '#2A2A2A' : '#EFEFEF'};
-  border-bottom-width: 1px;
-  border-bottom-color: ${(props: ThemeProps) => props.isDark ? '#444444' : '#DDDDDD'};
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const ReplyPreviewContent = styled.View`
-  flex: 1;
-`;
-
-const ReplyPreviewSender = styled.Text<ThemeProps>`
-  font-size: 13px;
-  font-weight: bold;
-  color: ${(props: ThemeProps) => props.isDark ? '#BBBBBB' : '#555555'};
-`;
-
-const ReplyPreviewText = styled.Text<ThemeProps>`
-  font-size: 13px;
-  color: ${(props: ThemeProps) => props.isDark ? '#AAAAAA' : '#666666'};
-`;
-
-const CloseReplyButton = styled.TouchableOpacity`
-  padding: 8px;
-`;
-
-const CloseReplyButtonText = styled.Text<ThemeProps>`
-  font-size: 18px;
-  color: ${(props: ThemeProps) => props.isDark ? '#AAAAAA' : '#666666'};
-`;
-
 const ReplyContextContainer = styled.TouchableOpacity<MessageProps>`
   background-color: ${(props: MessageProps) => props.isCurrentUser ? 'rgba(255,255,255,0.15)' : (props.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')};
   padding: 6px 10px;
@@ -613,6 +724,32 @@ const ReplyContextSender = styled.Text<MessageProps>`
 const ReplyContextText = styled.Text<MessageProps>`
   font-size: 12px;
   color: ${(props: MessageProps) => props.isCurrentUser ? 'rgba(255,255,255,0.8)' : (props.isDark ? '#CCCCCC' : '#555555')};
+`;
+
+const ReactionsContainer = styled.View`
+  flex-direction: row;
+  margin-top: 8px;
+  align-self: flex-start; /* For received messages */
+  /* For sent messages, this will be overridden by MessageContainer align-items: flex-end */
+`;
+
+const ReactionPill = styled.View`
+  flex-direction: row;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  padding: 2px 6px;
+  margin-right: 4px;
+`;
+
+const ReactionEmoji = styled.Text`
+  font-size: 12px;
+`;
+
+const ReactionCount = styled.Text`
+  font-size: 12px;
+  margin-left: 3px;
+  color: #555;
 `;
 
 const InputOuterContainer = styled.View`

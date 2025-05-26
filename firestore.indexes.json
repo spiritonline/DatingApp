@@ -4,8 +4,18 @@
       "collectionGroup": "messages",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
+        { "fieldPath": "isRead", "order": "ASCENDING" },
         { "fieldPath": "senderId", "order": "ASCENDING" },
-        { "fieldPath": "isRead", "order": "ASCENDING" }
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "senderId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
     }
   ],
