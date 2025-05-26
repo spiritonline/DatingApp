@@ -1,18 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   FlatList, 
+  TouchableOpacity, 
+  Text, 
   KeyboardAvoidingView, 
   Platform, 
   ActivityIndicator,
-  useColorScheme,
-  Alert
+  Alert,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { Swipeable } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { auth } from '../services/firebase';
 import { AuthStackParamList } from '../navigation/types';
 import styled from 'styled-components/native';
-import { ThemeProps } from '../utils/styled-components';
+import { ThemeProps as BaseThemeProps } from '../utils/styled-components';
+import { useAppTheme } from '../utils/useAppTheme';
 import { 
   sendMessage as sendChatMessage, 
   subscribeToMessages, 
@@ -20,6 +25,10 @@ import {
   isTestUser, 
   cleanupTestChat
 } from '../services/chatService';
+
+// Constants
+const REPLY_PREVIEW_MAX_LENGTH = 70;
+const REPLY_PANEL_HEIGHT = 60; // Approximate height for animation
 
 type ChatConversationScreenRouteProp = RouteProp<AuthStackParamList, 'ChatConversation'>;
 
@@ -30,11 +39,15 @@ interface Message {
   type: 'text' | 'image' | 'video' | 'audio';
   createdAt: Date | { toDate: () => Date } | number;
   isRead?: boolean;
+  replyTo?: {
+    id: string;
+    content: string;
+    senderId: string;
+  };
 }
 
 export default function ChatConversationScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { isDark, colors } = useAppTheme();
   const navigation = useNavigation();
   const route = useRoute<ChatConversationScreenRouteProp>();
   const { chatId, partnerName } = route.params;
@@ -45,10 +58,26 @@ export default function ChatConversationScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isTestChatScreen, setIsTestChatScreen] = useState(false);
   
+  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+
   const flatListRef = useRef<FlatList>(null);
+  const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
   const currentUser = auth.currentUser;
-  
-  // Subscribe to messages and determine if this is a test chat
+
+  // Animation for reply panel
+  const replyPanelAnimHeight = useSharedValue(0);
+  const replyPanelAnimOpacity = useSharedValue(0);
+
+  const animatedReplyPanelStyle = useAnimatedStyle(() => {
+    return {
+      height: replyPanelAnimHeight.value,
+      opacity: replyPanelAnimOpacity.value,
+      overflow: 'hidden',
+    };
+  });
+
+    // Subscribe to messages and determine if this is a test chat
   useEffect(() => {
     if (!chatId || !currentUser) return;
     
@@ -76,7 +105,20 @@ export default function ChatConversationScreen() {
     
     return unsubscribe;
   }, [chatId, currentUser]);
-  
+
+  // Effect to handle reply panel animation
+  useEffect(() => {
+    if (replyToMessage) {
+      replyPanelAnimHeight.value = withTiming(REPLY_PANEL_HEIGHT, { duration: 200, easing: Easing.out(Easing.quad) });
+      replyPanelAnimOpacity.value = withTiming(1, { duration: 200 });
+    } else {
+      replyPanelAnimHeight.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) });
+      replyPanelAnimOpacity.value = withTiming(0, { duration: 200 });
+    }
+  }, [replyToMessage, replyPanelAnimHeight, replyPanelAnimOpacity]);
+
+
+
   // Send a message
   const sendMessage = async () => {
     if (!inputMessage.trim() || !currentUser || !chatId) return;
@@ -88,8 +130,20 @@ export default function ChatConversationScreen() {
       setIsSending(true);
       
       // Correctly pass messageData object to sendChatMessage
-      // The `sendChatMessage` function from `chatService` expects an object with content, senderId, and type.
-      const success = await sendChatMessage(chatId, { content: inputMessage.trim(), senderId, type: 'text' });
+      const messagePayload: Parameters<typeof sendChatMessage>[1] = {
+        content: inputMessage.trim(),
+        senderId,
+        type: 'text',
+      };
+
+      if (replyToMessage) {
+        messagePayload.replyTo = {
+          id: replyToMessage.id,
+          content: replyToMessage.content,
+          senderId: replyToMessage.senderId,
+        };
+      }
+      const success = await sendChatMessage(chatId, messagePayload);
       
       if (success) {
         setInputMessage('');
@@ -101,6 +155,7 @@ export default function ChatConversationScreen() {
       Alert.alert('Error', 'An unexpected error occurred while sending your message.');
     } finally {
       setIsSending(false);
+      setReplyToMessage(null); // Clear reply context after sending
     }
   };
   
@@ -153,6 +208,56 @@ export default function ChatConversationScreen() {
       ]
     );
   };
+
+  const handleSwipeReply = (message: Message) => {
+    setReplyToMessage(message);
+    // Close other swipeables
+    Object.values(swipeableRefs.current).forEach(ref => ref?.close());
+  };
+
+  const renderLeftActions = () => {
+    return (
+      <ReplyActionContainer>
+        <ReplyIconText isDark={isDark}>↩️</ReplyIconText>
+      </ReplyActionContainer>
+    );
+  };
+
+  const truncateText = (text: string, maxLength: number) => {
+    if (text.length <= maxLength) return text;
+    return text.slice(0, maxLength) + '...';
+  };
+
+  const handleReplyContextTap = (originalMessageId: string) => {
+    const originalMessageIndex = messages.findIndex(msg => msg.id === originalMessageId);
+    if (originalMessageIndex !== -1 && flatListRef.current) {
+      flatListRef.current.scrollToIndex({
+        index: originalMessageIndex,
+        animated: true,
+        viewPosition: 0.5, // Scroll to middle
+      });
+      setHighlightedMessageId(originalMessageId);
+      setTimeout(() => setHighlightedMessageId(null), 1500); // Highlight for 1.5s
+    } else {
+      Alert.alert("Original message not found or not loaded yet.");
+    }
+  };
+
+  useEffect(() => {
+    // This effect is for cleaning up highlighted message state
+    let timer: NodeJS.Timeout;
+    if (highlightedMessageId) {
+      timer = setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 1500); 
+    }
+    return () => clearTimeout(timer);
+  }, [highlightedMessageId]);
+
+
+  const getDisplayNameForReply = (senderId: string) => {
+    return senderId === currentUser?.uid ? "You" : partnerName;
+  };
   
   if (isLoading) {
     return (
@@ -204,7 +309,7 @@ export default function ChatConversationScreen() {
       
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
         <MessagesContainer>
@@ -216,34 +321,78 @@ export default function ChatConversationScreen() {
             </EmptyContainer>
           ) : (
             <FlatList
+              style={{ flex: 1 }}
               ref={flatListRef}
               data={messages}
               keyExtractor={(item) => item.id}
+              extraData={highlightedMessageId} // Ensure re-render on highlight change
               renderItem={({ item }) => {
                 const isCurrentUser = item.senderId === currentUser?.uid;
+                const isHighlighted = item.id === highlightedMessageId;
                 
                 return (
-                  <MessageContainer 
-                    isCurrentUser={isCurrentUser}
-                    testID={isCurrentUser ? 'sent-message' : 'received-message'}
+                  <Swipeable
+                    ref={(ref) => {
+                      if (ref) swipeableRefs.current[item.id] = ref;
+                    }}
+                    renderLeftActions={renderLeftActions}
+                    onSwipeableOpen={() => handleSwipeReply(item)}
+                    overshootLeft={false} // Prevent overswiping left for reply icon
+                    friction={1.5}
                   >
-                    <MessageBubble isDark={isDark} isCurrentUser={isCurrentUser}>
-                      <MessageText isDark={isDark} isCurrentUser={isCurrentUser}>
-                        {item.content}
-                      </MessageText>
-                      <MessageTime isDark={isDark} isCurrentUser={isCurrentUser}>
-                        {formatTime(item.createdAt)}
-                      </MessageTime>
-                    </MessageBubble>
-                  </MessageContainer>
+                    <MessageContainer 
+                      isCurrentUser={isCurrentUser}
+                      testID={isCurrentUser ? 'sent-message' : 'received-message'}
+                    >
+                      <MessageBubble isDark={isDark} isCurrentUser={isCurrentUser} isHighlighted={isHighlighted}>
+                        {item.replyTo && (
+                          <ReplyContextContainer
+                            onPress={() => handleReplyContextTap(item.replyTo!.id)}
+                            isCurrentUser={isCurrentUser}
+                            isDark={isDark}
+                          >
+                            <ReplyContextSender isDark={isDark} isCurrentUser={isCurrentUser}>
+                              {getDisplayNameForReply(item.replyTo.senderId)}
+                            </ReplyContextSender>
+                            <ReplyContextText isDark={isDark} isCurrentUser={isCurrentUser}>
+                              {truncateText(item.replyTo.content, REPLY_PREVIEW_MAX_LENGTH)}
+                            </ReplyContextText>
+                          </ReplyContextContainer>
+                        )}
+                        <MessageText isDark={isDark} isCurrentUser={isCurrentUser}>
+                          {item.content}
+                        </MessageText>
+                        <MessageTime isDark={isDark} isCurrentUser={isCurrentUser}>
+                          {formatTime(item.createdAt)}
+                        </MessageTime>
+                      </MessageBubble>
+                    </MessageContainer>
+                  </Swipeable>
                 );
               }}
-              contentContainerStyle={{ paddingVertical: 16 }}
+              contentContainerStyle={{ paddingVertical: 16, flexGrow: 1 }}
             />
           )}
         </MessagesContainer>
-        
-        <InputContainer isDark={isDark}>
+        <Animated.View style={animatedReplyPanelStyle}>
+            {replyToMessage && (
+              <ReplyPreviewPanel isDark={isDark}>
+                <ReplyPreviewContent>
+                  <ReplyPreviewSender isDark={isDark}>
+                    Replying to {getDisplayNameForReply(replyToMessage.senderId)}
+                  </ReplyPreviewSender>
+                  <ReplyPreviewText isDark={isDark}>
+                    {truncateText(replyToMessage.content, REPLY_PREVIEW_MAX_LENGTH)}
+                  </ReplyPreviewText>
+                </ReplyPreviewContent>
+                <CloseReplyButton onPress={() => setReplyToMessage(null)}>
+                  <CloseReplyButtonText isDark={isDark}>✕</CloseReplyButtonText>
+                </CloseReplyButton>
+              </ReplyPreviewPanel>
+            )}
+        </Animated.View>
+        <InputOuterContainer>
+          <InputContainer isDark={isDark}>
           <MessageInput
             value={inputMessage}
             onChangeText={setInputMessage}
@@ -263,9 +412,14 @@ export default function ChatConversationScreen() {
             <SendButtonText>{isSending ? 'Sending...' : 'Send'}</SendButtonText>
           </SendButton>
         </InputContainer>
+        </InputOuterContainer>
       </KeyboardAvoidingView>
     </Container>
   );
+}
+
+interface ThemeProps extends BaseThemeProps {
+  isDark: boolean;
 }
 
 // Styled components
@@ -280,13 +434,16 @@ const LoadingContainer = styled.View`
   align-items: center;
 `;
 
-const HeaderContainer = styled.View`
+const HeaderContainer = styled.View<ThemeProps>`
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
   padding: 16px;
   border-bottom-width: 1px;
   border-bottom-color: ${(props: ThemeProps) => props.isDark ? '#333333' : '#EEEEEE'};
+  height: 40px;
+  justify-content: center;
+  align-items: center;
 `;
 
 const HeaderContent = styled.View`
@@ -370,7 +527,8 @@ const EmptyText = styled.Text<ThemeProps>`
 
 interface MessageProps {
   isCurrentUser: boolean;
-  isDark?: boolean;
+  isDark: boolean;
+  isHighlighted?: boolean;
 }
 
 const MessageContainer = styled.View<MessageProps>`
@@ -383,6 +541,7 @@ const MessageBubble = styled.View<MessageProps>`
   padding: 12px 16px;
   border-radius: 20px;
   background-color: ${(props: MessageProps) => 
+    props.isHighlighted ? (props.isDark ? '#555' : '#ddd') :
     props.isCurrentUser 
       ? '#FF6B6B' 
       : props.isDark ? '#2C2C2C' : '#F0F0F0'};
@@ -405,6 +564,75 @@ const MessageTime = styled.Text<MessageProps>`
   align-self: flex-end;
   margin-top: 4px;
 `;
+
+const ReplyActionContainer = styled.View`
+  background-color: #007AFF; /* Example color */
+  justify-content: center;
+  align-items: center;
+  width: 70px; /* Width of the reply action area */
+`;
+
+const ReplyIconText = styled.Text<ThemeProps>`
+  color: ${(props: ThemeProps) => props.isDark ? '#FFFFFF' : '#FFFFFF'};
+  font-size: 24px;
+`;
+
+const ReplyPreviewPanel = styled.View<ThemeProps>`
+  padding: 8px 16px;
+  background-color: ${(props: ThemeProps) => props.isDark ? '#2A2A2A' : '#EFEFEF'};
+  border-bottom-width: 1px;
+  border-bottom-color: ${(props: ThemeProps) => props.isDark ? '#444444' : '#DDDDDD'};
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const ReplyPreviewContent = styled.View`
+  flex: 1;
+`;
+
+const ReplyPreviewSender = styled.Text<ThemeProps>`
+  font-size: 13px;
+  font-weight: bold;
+  color: ${(props: ThemeProps) => props.isDark ? '#BBBBBB' : '#555555'};
+`;
+
+const ReplyPreviewText = styled.Text<ThemeProps>`
+  font-size: 13px;
+  color: ${(props: ThemeProps) => props.isDark ? '#AAAAAA' : '#666666'};
+`;
+
+const CloseReplyButton = styled.TouchableOpacity`
+  padding: 8px;
+`;
+
+const CloseReplyButtonText = styled.Text<ThemeProps>`
+  font-size: 18px;
+  color: ${(props: ThemeProps) => props.isDark ? '#AAAAAA' : '#666666'};
+`;
+
+const ReplyContextContainer = styled.TouchableOpacity<MessageProps>`
+  background-color: ${(props: MessageProps) => props.isCurrentUser ? 'rgba(255,255,255,0.15)' : (props.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')};
+  padding: 6px 10px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  border-left-width: 3px;
+  border-left-color: ${(props: MessageProps) => props.isCurrentUser ? '#FFFFFF' : '#FF6B6B'};
+`;
+
+const ReplyContextSender = styled.Text<MessageProps>`
+  font-size: 12px;
+  font-weight: bold;
+  color: ${(props: MessageProps) => props.isCurrentUser ? '#FFFFFF' : (props.isDark ? '#DDDDDD' : '#333333')};
+`;
+
+const ReplyContextText = styled.Text<MessageProps>`
+  font-size: 12px;
+  color: ${(props: MessageProps) => props.isCurrentUser ? 'rgba(255,255,255,0.8)' : (props.isDark ? '#CCCCCC' : '#555555')};
+`;
+
+const InputOuterContainer = styled.View`
+`; // Wrapper for input and potential reply panel
 
 const InputContainer = styled.View<ThemeProps>`
   flex-direction: row;

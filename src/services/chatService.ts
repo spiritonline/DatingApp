@@ -26,6 +26,7 @@ export interface ChatMessage {
     content: string;
     senderId: string;
   };
+  participantNames?: Record<string, string>; // Added to ensure consistency with ChatPreview
 }
 
 export interface ChatPreview {
@@ -37,6 +38,7 @@ export interface ChatPreview {
     senderId: string;
     timestamp: any;
     type: 'text' | 'image' | 'video' | 'audio';
+    replyTo?: ChatMessage['replyTo']; // Include replyTo in lastMessage as well
   };
   isTestChat?: boolean;
 }
