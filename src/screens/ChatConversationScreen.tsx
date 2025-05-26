@@ -216,11 +216,8 @@ export default function ChatConversationScreen() {
   };
 
   const renderLeftActions = () => {
-    return (
-      <ReplyActionContainer>
-        <ReplyIconText isDark={isDark}>↩️</ReplyIconText>
-      </ReplyActionContainer>
-    );
+    // Return an empty transparent view to maintain swipe functionality without visual elements
+    return <View style={{ width: 70, backgroundColor: 'transparent' }} />;
   };
 
   const truncateText = (text: string, maxLength: number) => {
@@ -271,7 +268,7 @@ export default function ChatConversationScreen() {
   
   return (
     <Container isDark={isDark} testID="chat-conversation-screen">
-      <HeaderContainer>
+      <HeaderContainer style={{ marginTop: Platform.OS === 'ios' ? 10 : 0 }}>
         <BackButton 
           onPress={() => navigation.goBack()}
           accessibilityLabel="Go back"
@@ -441,9 +438,6 @@ const HeaderContainer = styled.View<ThemeProps>`
   padding: 16px;
   border-bottom-width: 1px;
   border-bottom-color: ${(props: ThemeProps) => props.isDark ? '#333333' : '#EEEEEE'};
-  height: 40px;
-  justify-content: center;
-  align-items: center;
 `;
 
 const HeaderContent = styled.View`
@@ -565,17 +559,7 @@ const MessageTime = styled.Text<MessageProps>`
   margin-top: 4px;
 `;
 
-const ReplyActionContainer = styled.View`
-  background-color: #007AFF; /* Example color */
-  justify-content: center;
-  align-items: center;
-  width: 70px; /* Width of the reply action area */
-`;
-
-const ReplyIconText = styled.Text<ThemeProps>`
-  color: ${(props: ThemeProps) => props.isDark ? '#FFFFFF' : '#FFFFFF'};
-  font-size: 24px;
-`;
+// Removed unused styled components for reply action
 
 const ReplyPreviewPanel = styled.View<ThemeProps>`
   padding: 8px 16px;
