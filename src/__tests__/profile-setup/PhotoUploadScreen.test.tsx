@@ -1,9 +1,9 @@
-import { validatePhotoUpload, SimpleValidationResult } from '../../screens/profile-setup/utils/validation';
+import { validatePhotoUpload, PhotoItem } from '../../screens/profile-setup/utils/validation';
 
 // Mock the validation module
 jest.mock('../../screens/profile-setup/utils/validation', () => ({
   validatePhotoUpload: jest.fn(),
-  SimpleValidationResult: jest.requireActual('../../screens/profile-setup/utils/validation').SimpleValidationResult
+  // SimpleValidationResult: jest.requireActual('../../screens/profile-setup/utils/validation').SimpleValidationResult // Unused
 }));
 
 describe('PhotoUploadScreen Validation', () => {
@@ -14,7 +14,7 @@ describe('PhotoUploadScreen Validation', () => {
 
   describe('validatePhotoUpload', () => {
     it('should return error when no photos are uploaded', () => {
-      const emptyPhotos: any[] = [];
+      const emptyPhotos: PhotoItem[] = [];
       
       // Mock the validation function to return error for empty photos
       (validatePhotoUpload as jest.Mock).mockReturnValue({

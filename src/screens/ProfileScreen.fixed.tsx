@@ -11,10 +11,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import styled from 'styled-components/native';
+import { ThemeProps } from '../utils/styled-components';
 import { auth, db } from '../services/firebase';
 import { doc, getDoc } from '@firebase/firestore';
 import { MainNavigationProp } from '../navigation/types';
-import styled from 'styled-components/native';
 import { useAppTheme } from '../utils/useAppTheme';
 import { UserProfile } from '../services/profileService';
 
@@ -251,14 +252,14 @@ export default function ProfileScreen() {
 }
 
 // Styled components with proper typings
-interface StyledProps {
-  isDark?: boolean;
+interface StyledProps extends ThemeProps { // Use ThemeProps for consistency
+    // isDark is already in ThemeProps
 }
 
 // Container components
 const Container = styled(SafeAreaView)<StyledProps>`
   flex: 1;
-  background-color: ${(props) => props.isDark ? '#121212' : '#ffffff'};
+  background-color: ${(props: StyledProps) => props.isDark ? '#121212' : '#ffffff'};
 `;
 
 const LoadingContainer = styled.View`
@@ -270,13 +271,13 @@ const LoadingContainer = styled.View`
 const HeaderContainer = styled.View`
   padding: 16px;
   border-bottom-width: 1px;
-  border-bottom-color: ${(props: StyledProps) => props.isDark ? '#333333' : '#EEEEEE'};
+  border-bottom-color: ${(props: { isDark?: boolean }) => props.isDark ? '#333333' : '#EEEEEE'};
 `;
 
 const Title = styled.Text<StyledProps>`
   font-size: 28px;
   font-weight: bold;
-  color: ${(props) => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: StyledProps) => props.isDark ? '#ffffff' : '#000000'};
 `;
 
 const ProfileHeaderContainer = styled.View`
@@ -297,7 +298,7 @@ const ProfileAvatar = styled.View`
 const ProfileName = styled.Text<StyledProps>`
   font-size: 24px;
   font-weight: bold;
-  color: ${(props) => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: StyledProps) => props.isDark ? '#ffffff' : '#000000'};
   margin-bottom: 8px;
 `;
 
@@ -319,7 +320,7 @@ const SectionContainer = styled.View`
 const SectionTitle = styled.Text<StyledProps>`
   font-size: 18px;
   font-weight: bold;
-  color: ${(props) => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: StyledProps) => props.isDark ? '#ffffff' : '#000000'};
   margin-bottom: 16px;
 `;
 
@@ -329,12 +330,12 @@ const SettingItem = styled.View<StyledProps>`
   align-items: center;
   padding: 16px 0;
   border-bottom-width: 1px;
-  border-bottom-color: ${(props) => props.isDark ? '#333333' : '#EEEEEE'};
+  border-bottom-color: ${(props: StyledProps) => props.isDark ? '#333333' : '#EEEEEE'};
 `;
 
 const SettingLabel = styled.Text<StyledProps>`
   font-size: 16px;
-  color: ${(props) => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: StyledProps) => props.isDark ? '#ffffff' : '#000000'};
 `;
 
 const SettingButton = styled.TouchableOpacity<StyledProps>`
@@ -343,17 +344,17 @@ const SettingButton = styled.TouchableOpacity<StyledProps>`
   align-items: center;
   padding: 16px 0;
   border-bottom-width: 1px;
-  border-bottom-color: ${(props) => props.isDark ? '#333333' : '#EEEEEE'};
+  border-bottom-color: ${(props: StyledProps) => props.isDark ? '#333333' : '#EEEEEE'};
 `;
 
 const SettingButtonLabel = styled.Text<StyledProps>`
   font-size: 16px;
-  color: ${(props) => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: StyledProps) => props.isDark ? '#ffffff' : '#000000'};
 `;
 
 const SettingButtonValue = styled.Text<StyledProps>`
   font-size: 14px;
-  color: ${(props) => props.isDark ? '#888888' : '#666666'};
+  color: ${(props: StyledProps) => props.isDark ? '#888888' : '#666666'};
 `;
 
 const DeleteAccountButton = styled.TouchableOpacity`

@@ -54,7 +54,7 @@ describe('SignUpScreen', () => {
   });
 
   it('shows validation errors when form is submitted with empty fields', () => {
-    const { getByText, getByTestId } = render(
+    const { getByText: getByTextLocal, getByTestId } = render(
       <NavigationContainer>
         <SignUpScreen />
       </NavigationContainer>
@@ -63,9 +63,9 @@ describe('SignUpScreen', () => {
     const signUpButton = getByTestId('signup-button');
     fireEvent.press(signUpButton);
     
-    expect(getByText('Email is required')).toBeTruthy();
-    expect(getByText('Password is required')).toBeTruthy();
-    expect(getByText('You must accept the terms and location checks')).toBeTruthy();
+    expect(getByTextLocal('Email is required')).toBeTruthy();
+    expect(getByTextLocal('Password is required')).toBeTruthy();
+    expect(getByTextLocal('You must accept the terms and location checks')).toBeTruthy();
   });
 
   it('shows validation error when passwords do not match', () => {
@@ -90,7 +90,7 @@ describe('SignUpScreen', () => {
   });
 
   it('navigates to MainFeed after successful sign up', async () => {
-    const { getByTestId, getByText } = render(
+    const { getByTestId } = render(
       <NavigationContainer>
         <SignUpScreen />
       </NavigationContainer>

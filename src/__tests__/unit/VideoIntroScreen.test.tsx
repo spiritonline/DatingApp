@@ -1,9 +1,10 @@
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import VideoIntroScreen from '../../screens/VideoIntroScreen';
 import * as ExpoCamera from 'expo-camera';
 import * as VideoThumbnails from 'expo-video-thumbnails';
+import { Video } from 'expo-av'; // Import Video type
 
 // Mock navigation
 const mockNavigate = jest.fn();
@@ -22,14 +23,17 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
+// Define a type for the camera mock to satisfy TypeScript
+type MockExpoCameraType = typeof ExpoCamera & {
+  requestCameraPermissionsAsync: jest.Mock;
+  requestMicrophonePermissionsAsync: jest.Mock;
+};
+
 // Mock expo-camera
 jest.mock('expo-camera', () => {
   return {
-    Camera: 'Camera',
-    CameraType: {
-      front: 'front',
-      back: 'back'
-    },
+    Camera: 'Camera', // Mock Camera component as a string for testing
+    CameraType: { front: 'front', back: 'back' },
     // Use the same API pattern as our implementation
     requestCameraPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
     requestMicrophonePermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
@@ -83,8 +87,8 @@ describe('VideoIntroScreen', () => {
 
   it('renders loading state when checking permissions', async () => {
     // Override permission mock to return null initially with a delay
-    const mockExpoCamera = ExpoCamera as any;
-    mockExpoCamera.requestCameraPermissionsAsync.mockImplementationOnce(() => 
+    const mockExpoCameraInstance = ExpoCamera as MockExpoCameraType;
+    mockExpoCameraInstance.requestCameraPermissionsAsync.mockImplementationOnce(() =>
       new Promise(resolve => setTimeout(() => resolve({ status: 'granted' }), 100))
     );
 
@@ -111,8 +115,8 @@ describe('VideoIntroScreen', () => {
 
   it('handles permission denial correctly', async () => {
     // Override permission mock to return denied using our type casting approach
-    const mockExpoCamera = ExpoCamera as any;
-    mockExpoCamera.requestCameraPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
+    const mockExpoCameraInstance = ExpoCamera as MockExpoCameraType;
+    mockExpoCameraInstance.requestCameraPermissionsAsync.mockResolvedValueOnce({ status: 'denied' });
 
     const { getByTestId, getByText } = render(
       <NavigationContainer>
@@ -130,12 +134,12 @@ describe('VideoIntroScreen', () => {
     const mockStopRecording = jest.fn();
     
     // Mock useRef to return our mock camera
-    jest.spyOn(React, 'useRef').mockImplementationOnce(() => ({
+    jest.spyOn(React, 'useRef').mockReturnValueOnce({
       current: {
         recordAsync: mockRecordAsync,
         stopRecording: mockStopRecording
-      }
-    }));
+      } as unknown as typeof ExpoCamera.Camera // Fixed type reference
+    });
 
     const { getByTestId } = render(
       <NavigationContainer>
@@ -151,8 +155,8 @@ describe('VideoIntroScreen', () => {
 
   it('generates thumbnail from video', async () => {
     // Set up mock for video state
-    jest.spyOn(React, 'useState').mockImplementationOnce(() => [null, jest.fn()]);
-    jest.spyOn(React, 'useState').mockImplementationOnce(() => ['front', jest.fn()]);
+    jest.spyOn(React, 'useState').mockImplementationOnce(() => [null, jest.fn()]); // hasPermission
+    jest.spyOn(React, 'useState').mockImplementationOnce(() => ['front', jest.fn()]); // type
     jest.spyOn(React, 'useState').mockImplementationOnce(() => [false, jest.fn()]);
     jest.spyOn(React, 'useState').mockImplementationOnce(() => ['test-video-uri', jest.fn()]);
     

@@ -81,9 +81,15 @@ export default function ChatConversationScreen() {
   const sendMessage = async () => {
     if (!inputMessage.trim() || !currentUser || !chatId) return;
     
+    // Ensure currentUser.uid is available for senderId
+    const senderId = currentUser.uid;
+
     try {
       setIsSending(true);
-      const success = await sendChatMessage(chatId, inputMessage.trim());
+      
+      // Correctly pass messageData object to sendChatMessage
+      // The `sendChatMessage` function from `chatService` expects an object with content, senderId, and type.
+      const success = await sendChatMessage(chatId, { content: inputMessage.trim(), senderId, type: 'text' });
       
       if (success) {
         setInputMessage('');

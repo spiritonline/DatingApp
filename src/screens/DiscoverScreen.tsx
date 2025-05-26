@@ -336,15 +336,34 @@ function DiscoverScreen() {
   );
 }
 
+// Define specific prop types for styled components in this screen
+interface ActionButtonStyledProps extends ThemeProps {
+  primary?: boolean;
+  secondary?: boolean;
+}
+
+interface ModalButtonStyledProps extends ThemeProps {
+  secondary?: boolean;
+  disabled?: boolean;
+}
+
+interface CharacterCounterStyledProps extends ThemeProps {
+  isValid: boolean;
+}
+
+interface ProfilePhotoStyledProps extends ThemeProps {
+  width: number;
+}
+
 // Styled components
 const Container = styled(SafeAreaView)<ThemeProps>`
   flex: 1;
-  background-color: ${props => props.isDark ? '#121212' : '#ffffff'};
+  background-color: ${(props: ThemeProps) => props.isDark ? '#121212' : '#ffffff'};
 `;
 
-const ProfilePhoto = styled.Image<{ width: number }>`
-  width: ${props => props.width}px;
-  height: ${props => props.width * 1.3}px;
+const ProfilePhoto = styled.Image<ProfilePhotoStyledProps>`
+  width: ${(props: ProfilePhotoStyledProps) => props.width}px;
+  height: ${(props: ProfilePhotoStyledProps) => props.width * 1.3}px;
 `;
 
 const ProfileInfoContainer = styled.View`
@@ -354,7 +373,7 @@ const ProfileInfoContainer = styled.View`
 const NameAgeText = styled.Text<ThemeProps>`
   font-size: 28px;
   font-weight: bold;
-  color: ${props => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: ThemeProps) => props.isDark ? '#ffffff' : '#000000'};
 `;
 
 const MutualFriendsContainer = styled.View`
@@ -365,26 +384,26 @@ const MutualFriendsContainer = styled.View`
 
 const MutualFriendsText = styled.Text<ThemeProps>`
   font-size: 14px;
-  color: ${props => props.isDark ? '#cccccc' : '#666666'};
+  color: ${(props: ThemeProps) => props.isDark ? '#cccccc' : '#666666'};
 `;
 
 const PromptContainer = styled.View<ThemeProps>`
   margin: 8px 16px 24px;
   padding: 16px;
   border-radius: 12px;
-  background-color: ${props => props.isDark ? '#222222' : '#f5f5f5'};
+  background-color: ${(props: ThemeProps) => props.isDark ? '#222222' : '#f5f5f5'};
 `;
 
 const PromptLabel = styled.Text<ThemeProps>`
   font-size: 16px;
   font-weight: bold;
-  color: ${props => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: ThemeProps) => props.isDark ? '#ffffff' : '#000000'};
   margin-bottom: 8px;
 `;
 
 const PromptAnswer = styled.Text<ThemeProps>`
   font-size: 16px;
-  color: ${props => props.isDark ? '#cccccc' : '#333333'};
+  color: ${(props: ThemeProps) => props.isDark ? '#cccccc' : '#333333'};
   line-height: 22px;
 `;
 
@@ -396,24 +415,24 @@ const FooterContainer = styled.View<ThemeProps>`
   flex-direction: row;
   justify-content: space-around;
   padding: 16px;
-  background-color: ${props => props.isDark ? 'rgba(18, 18, 18, 0.95)' : 'rgba(255, 255, 255, 0.95)'};
+  background-color: ${(props: ThemeProps) => props.isDark ? 'rgba(18, 18, 18, 0.95)' : 'rgba(255, 255, 255, 0.95)'};
   ${Platform.OS === 'ios' ? 'padding-bottom: 32px;' : ''}
 `;
 
-const ActionButton = styled.TouchableOpacity<{ primary?: boolean; secondary?: boolean }>`
+const ActionButton = styled.TouchableOpacity<ActionButtonStyledProps>`
   width: 60px;
   height: 60px;
   border-radius: 30px;
   justify-content: center;
   align-items: center;
-  background-color: ${props => 
+  background-color: ${(props: ActionButtonStyledProps) =>
     props.primary ? '#FF6B6B' : 
     props.secondary ? '#FFD700' : '#FFFFFF'};
   elevation: 3;
+  shadow-opacity: 0.3;
+  shadow-radius: 5px;
   shadow-color: #000;
   shadow-offset: 0px 2px;
-  shadow-opacity: 0.2;
-  shadow-radius: 4px;
 `;
 
 const ActionButtonText = styled.Text`
@@ -432,19 +451,19 @@ const ModalContainer = styled.View<ThemeProps>`
   width: 100%;
   padding: 24px;
   border-radius: 12px;
-  background-color: ${props => props.isDark ? '#222222' : '#ffffff'};
+  background-color: ${(props: ThemeProps) => props.isDark ? '#222222' : '#ffffff'};
 `;
 
 const ModalTitle = styled.Text<ThemeProps>`
   font-size: 20px;
   font-weight: bold;
-  color: ${props => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: ThemeProps) => props.isDark ? '#ffffff' : '#000000'};
   margin-bottom: 8px;
 `;
 
 const ModalSubtitle = styled.Text<ThemeProps>`
   font-size: 14px;
-  color: ${props => props.isDark ? '#cccccc' : '#666666'};
+  color: ${(props: ThemeProps) => props.isDark ? '#cccccc' : '#666666'};
   margin-bottom: 16px;
 `;
 
@@ -453,16 +472,16 @@ const TextLikeInput = styled.TextInput<ThemeProps>`
   border-radius: 8px;
   padding: 12px;
   font-size: 16px;
-  border: 1px solid ${props => props.isDark ? '#444' : '#ddd'};
-  color: ${props => props.isDark ? '#ffffff' : '#000000'};
-  background-color: ${props => props.isDark ? '#333333' : '#f9f9f9'};
+  border: 1px solid ${(props: ThemeProps) => props.isDark ? '#444' : '#ddd'};
+  color: ${(props: ThemeProps) => props.isDark ? '#ffffff' : '#000000'};
+  background-color: ${(props: ThemeProps) => props.isDark ? '#333333' : '#f9f9f9'};
 `;
 
-const CharacterCounter = styled.Text<ThemeProps & { isValid: boolean }>`
+const CharacterCounter = styled.Text<CharacterCounterStyledProps>`
   align-self: flex-end;
   margin-top: 8px;
   font-size: 12px;
-  color: ${props => props.isValid ? 
+  color: ${(props: CharacterCounterStyledProps) => props.isValid ?
     (props.isDark ? '#8BC34A' : '#4CAF50') : 
     (props.isDark ? '#FF8A80' : '#F44336')};
 `;
@@ -473,22 +492,18 @@ const ModalButtonsContainer = styled.View`
   margin-top: 24px;
 `;
 
-interface ModalButtonProps {
-  secondary?: boolean;
-  disabled?: boolean;
-}
-
-const ModalButton = styled.TouchableOpacity<ModalButtonProps>`
+const ModalButton = styled.TouchableOpacity<ModalButtonStyledProps>`
   flex: 0.48;
   height: 50px;
   border-radius: 25px;
+  padding: 0 20px;
   justify-content: center;
   align-items: center;
-  background-color: ${props => 
-    props.secondary ? 'transparent' : 
+  background-color: ${(props: ModalButtonStyledProps) => 
+    props.secondary ? 'transparent' :
     props.disabled ? '#999999' : '#FF6B6B'};
-  border: ${props => props.secondary ? '1px solid #FF6B6B' : 'none'};
-  opacity: ${props => props.disabled ? 0.7 : 1};
+  border: ${(props: ModalButtonStyledProps) => props.secondary ? '1px solid #FF6B6B' : 'none'};
+  opacity: ${(props: ModalButtonStyledProps) => props.disabled ? 0.7 : 1};
 `;
 
 const ModalButtonText = styled.Text`
@@ -506,7 +521,7 @@ const LoadingContainer = styled.View`
 const LoadingText = styled.Text<ThemeProps>`
   margin-top: 16px;
   font-size: 16px;
-  color: ${props => props.isDark ? '#cccccc' : '#666666'};
+  color: ${(props: ThemeProps) => props.isDark ? '#cccccc' : '#666666'};
 `;
 
 const LoadingOverlay = styled.View`
@@ -527,7 +542,7 @@ const ErrorContainer = styled.View`
 
 const ErrorText = styled.Text<ThemeProps>`
   font-size: 16px;
-  color: ${props => props.isDark ? '#FF8A80' : '#F44336'};
+  color: ${(props: ThemeProps) => props.isDark ? '#FF8A80' : '#F44336'};
   margin-bottom: 16px;
 `;
 

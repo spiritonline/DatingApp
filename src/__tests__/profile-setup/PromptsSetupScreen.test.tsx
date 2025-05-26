@@ -1,10 +1,10 @@
-import { validatePromptAnswers, PromptAnswer, SimpleValidationResult } from '../../screens/profile-setup/utils/validation';
+import { validatePromptAnswers, PromptAnswer } from '../../screens/profile-setup/utils/validation';
 
 // Mock the validation module
 jest.mock('../../screens/profile-setup/utils/validation', () => ({
   validatePromptAnswers: jest.fn(),
   PromptAnswer: jest.requireActual('../../screens/profile-setup/utils/validation').PromptAnswer,
-  SimpleValidationResult: jest.requireActual('../../screens/profile-setup/utils/validation').SimpleValidationResult
+  // SimpleValidationResult: jest.requireActual('../../screens/profile-setup/utils/validation').SimpleValidationResult // Unused
 }));
 
 describe('PromptsSetupScreen Validation', () => {

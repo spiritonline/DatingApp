@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import styled from 'styled-components/native';
+import { ThemeProps } from '../utils/styled-components';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MainNavigationProp } from '../navigation/types';
 import { auth } from '../services/firebase';
@@ -34,8 +35,7 @@ export default function ChatListScreen() {
   const [isTestChatInitializing, setIsTestChatInitializing] = useState(false);
   const currentUser = auth.currentUser;
   
-  // Function to format timestamp from Firestore
-  const formatTimestamp = (timestamp: any): string => {
+  const formatTimestamp = useCallback((timestamp: any): string => {
     if (!timestamp) return '';
     
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -43,43 +43,31 @@ export default function ChatListScreen() {
     const diff = now.getTime() - date.getTime();
     
     if (diff < 24 * 60 * 60 * 1000) {
-      // Less than 24 hours - show time
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (diff < 48 * 60 * 60 * 1000) {
-      // Less than 48 hours - show 'Yesterday'
       return 'Yesterday';
     } else if (diff < 7 * 24 * 60 * 60 * 1000) {
-      // Less than 7 days - show day of week
       return date.toLocaleDateString([], { weekday: 'long' });
     } else {
-      // More than 7 days - show date
       return date.toLocaleDateString();
     }
-  };
+  }, []);
   
   // Format the chat previews from Firestore data
-  const formatChatPreviews = (firestoreChats: ChatPreviewType[]): ChatPreview[] => {
+  const formatChatPreviews = useCallback((firestoreChats: ChatPreviewType[]): ChatPreview[] => {
     if (!currentUser) return [];
     
     return firestoreChats.map(chat => {
-      // Find the other participant(s) in the chat
       const otherParticipantId = chat.participantIds.find(id => id !== currentUser.uid) || '';
-      
-      // Get the display name for the other participant
       let name = '';
       if (chat.participantNames && otherParticipantId) {
         name = chat.participantNames[otherParticipantId] || otherParticipantId.substring(0, 8);
       }
-      
-      // For test chats, ensure we have a clear indicator
       if (chat.isTestChat) {
         name = name + ' (Test)';
       }
-      
-      // Format the last message
       let lastMessage = 'No messages yet';
-      let vitality = 1; // Default to text
-      
+      let vitality = 1;
       if (chat.lastMessage) {
         if (chat.lastMessage.type === 'text') {
           lastMessage = chat.lastMessage.content;
@@ -95,8 +83,6 @@ export default function ChatListScreen() {
           vitality = 4;
         }
       }
-      
-      // Determine if the last message is unread
       const unread = chat.lastMessage ? chat.lastMessage.senderId !== currentUser.uid : false;
       
       return {
@@ -109,23 +95,28 @@ export default function ChatListScreen() {
         isTestChat: chat.isTestChat,
       };
     });
-  };
+  }, [currentUser, formatTimestamp]);
   
   // Fetch user chats
   const fetchChats = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      setChats([]);
+      setIsLoading(false);
+      return;
+    }
     
     try {
       setIsLoading(true);
-      const chatsData = await getUserChats(currentUser.uid);
+      const chatsData = await getUserChats(); // Corrected: getUserChats takes no arguments
       const formattedChats = formatChatPreviews(chatsData);
       setChats(formattedChats);
     } catch (error) {
       console.error('Error fetching chats:', error);
+      setChats([]); // Clear chats on error
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, formatChatPreviews]);
   
   // Fetch chats when the screen is focused
   useFocusEffect(useCallback(() => {
@@ -244,9 +235,7 @@ export default function ChatListScreen() {
 }
 
 // Styled components with proper typings
-interface StyledProps {
-  isDark?: boolean;
-}
+type StyledProps = ThemeProps; // Use ThemeProps from styled-components.ts for consistency
 
 interface ChatMessageProps extends StyledProps {
   unread?: boolean;
@@ -255,13 +244,13 @@ interface ChatMessageProps extends StyledProps {
 // Container components
 const Container = styled(SafeAreaView)<StyledProps>`
   flex: 1;
-  background-color: ${(props) => props.isDark ? '#121212' : '#ffffff'};
+  background-color: ${(props: StyledProps) => props.isDark ? '#121212' : '#ffffff'};
 `;
 
 const HeaderContainer = styled.View`
   padding: 16px;
   border-bottom-width: 1px;
-  border-bottom-color: ${(props: StyledProps) => props.isDark ? '#333333' : '#EEEEEE'};
+  border-bottom-color: ${(props: { isDark?: boolean }) => props.isDark ? '#333333' : '#EEEEEE'};
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
@@ -270,7 +259,7 @@ const HeaderContainer = styled.View`
 const Title = styled.Text<StyledProps>`
   font-size: 28px;
   font-weight: bold;
-  color: ${(props) => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: StyledProps) => props.isDark ? '#ffffff' : '#000000'};
 `;
 
 const EmptyContainer = styled.View`
@@ -283,13 +272,13 @@ const EmptyContainer = styled.View`
 const EmptyText = styled.Text<StyledProps>`
   font-size: 20px;
   font-weight: bold;
-  color: ${(props) => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: StyledProps) => props.isDark ? '#ffffff' : '#000000'};
   margin-bottom: 8px;
 `;
 
 const EmptySubtext = styled.Text<StyledProps>`
   font-size: 16px;
-  color: ${(props) => props.isDark ? '#888888' : '#666666'};
+  color: ${(props: StyledProps) => props.isDark ? '#888888' : '#666666'};
   text-align: center;
 `;
 
@@ -299,8 +288,8 @@ const ChatItem = styled.TouchableOpacity<StyledProps>`
   padding: 16px;
   align-items: center;
   border-bottom-width: 1px;
-  border-bottom-color: ${(props) => props.isDark ? '#333333' : '#EEEEEE'};
-  background-color: ${(props) => props.isDark ? '#121212' : '#ffffff'};
+  border-bottom-color: ${(props: StyledProps) => props.isDark ? '#333333' : '#EEEEEE'};
+  background-color: ${(props: StyledProps) => props.isDark ? '#121212' : '#ffffff'};
 `;
 
 const ChatAvatar = styled.View`
@@ -326,20 +315,20 @@ const ChatHeader = styled.View`
 const ChatName = styled.Text<StyledProps>`
   font-size: 16px;
   font-weight: bold;
-  color: ${(props) => props.isDark ? '#ffffff' : '#000000'};
+  color: ${(props: StyledProps) => props.isDark ? '#ffffff' : '#000000'};
 `;
 
 const ChatTime = styled.Text<StyledProps>`
   font-size: 12px;
-  color: ${(props) => props.isDark ? '#888888' : '#999999'};
+  color: ${(props: StyledProps) => props.isDark ? '#888888' : '#999999'};
 `;
 
 const ChatMessage = styled.Text<ChatMessageProps>`
   font-size: 14px;
-  color: ${(props) => props.isDark 
+  color: ${(props: ChatMessageProps) => props.isDark
     ? (props.unread ? '#ffffff' : '#AAAAAA') 
     : (props.unread ? '#000000' : '#666666')};
-  font-weight: ${(props) => props.unread ? 'bold' : 'normal'};
+  font-weight: ${(props: ChatMessageProps) => props.unread ? 'bold' : 'normal'};
 `;
 
 const VitalityIndicator = styled.View`
@@ -356,7 +345,7 @@ const StartTestChatButton = styled.TouchableOpacity<{ disabled?: boolean }>`
   padding: 8px 12px;
   border-radius: 16px;
   background-color: #FF6B6B;
-  opacity: ${(props) => props.disabled ? 0.5 : 1};
+  opacity: ${(props: { disabled?: boolean }) => props.disabled ? 0.5 : 1};
 `;
 
 const StartTestChatText = styled.Text`

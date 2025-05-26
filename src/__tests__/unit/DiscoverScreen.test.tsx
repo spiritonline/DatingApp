@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
