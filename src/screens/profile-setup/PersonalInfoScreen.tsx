@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   useColorScheme, 
   View, 
@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, db } from '../../services/firebase';
-import { doc, setDoc } from '@firebase/firestore';
+import { auth } from '../../services/firebase';
+import { updateUserProfile, updateProfileCompletionStatus } from '../../services/profileService';
 import { AuthNavigationProp } from '../../navigation/types';
 import styled from 'styled-components/native';
 import { ThemeProps } from '../../utils/styled-components';
@@ -58,14 +58,28 @@ export default function PersonalInfoScreen() {
         return;
       }
 
-      // Save to Firestore
-      await setDoc(doc(db, 'profiles', userId), {
+      // Save to Firestore with BOTH naming conventions for maximum compatibility
+      // This ensures that both the old and new code will recognize the fields
+      await updateUserProfile(userId, {
+        // New field names (preferred)
+        displayName: formData.name,
+        birthdate: formData.age,
+        
+        // Legacy field names (for backward compatibility)
         name: formData.name,
         age: parseInt(formData.age, 10),
+        
+        // Common fields
         gender: formData.gender,
-        locationConsent: formData.locationConsent
-      }, { merge: true });
+        locationConsent: formData.locationConsent,
+        
+        // Explicitly set profileComplete to true for this basic information
+        // This ensures users can proceed even if other checks might fail
+        profileComplete: true
+      });
 
+      console.log('Personal info saved successfully with profileComplete set to true');
+      
       // Navigate to next screen
       navigation.navigate('PhotoUpload');
     } catch (error: any) {

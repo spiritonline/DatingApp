@@ -4,10 +4,11 @@ import WelcomeScreen from '../screens/WelcomeScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import LogInScreen from '../screens/LogInScreen';
 import MainFeedScreen from '../screens/MainFeedScreen';
-// Import profile setup screens - these will be created next
 import PersonalInfoScreen from '../screens/profile-setup/PersonalInfoScreen';
 import PhotoUploadScreen from '../screens/profile-setup/PhotoUploadScreen';
 import PromptsSetupScreen from '../screens/profile-setup/PromptsSetupScreen';
+import VideoIntroScreen from '../screens/VideoIntroScreen';
+import ChatConversationScreen from '../screens/ChatConversationScreen';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
@@ -31,6 +32,8 @@ export function AuthNavigator({ initialRouteName = 'Welcome' }: AuthNavigatorPro
       <Stack.Screen name="PhotoUpload" component={PhotoUploadScreen} />
       <Stack.Screen name="PromptsSetup" component={PromptsSetupScreen} />
       <Stack.Screen name="MainFeed" component={MainFeedScreen} />
+      <Stack.Screen name="VideoIntro" component={VideoIntroScreen} />
+      <Stack.Screen name="ChatConversation" component={ChatConversationScreen} />
     </Stack.Navigator>
   );
 }

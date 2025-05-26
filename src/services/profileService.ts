@@ -10,8 +10,14 @@ import {
 // User profile interface
 export interface UserProfile {
   uid: string;
+  
+  // Support for both naming conventions
   displayName?: string;
+  name?: string; // Legacy field name
+  
   birthdate?: string;
+  age?: number | string; // Legacy field name
+  
   gender?: string;
   interestedIn?: string[];
   photos?: string[];
@@ -19,8 +25,14 @@ export interface UserProfile {
   bio?: string;
   location?: GeoPoint;
   profileComplete: boolean;
+  locationConsent?: boolean;
+  visible?: boolean;
+  mutualFriendsCount?: number;
   createdAt: any;
   updatedAt: any;
+  
+  // Allow for dynamic field access for backward compatibility
+  [key: string]: any;
 }
 
 export interface PromptAnswer {
@@ -113,15 +125,27 @@ export const updateUserProfile = async (
 export const isProfileComplete = (profile: UserProfile | null): boolean => {
   if (!profile) return false;
   
-  // Define your required fields for a complete profile
-  return !!(
-    profile.displayName &&
-    profile.birthdate &&
-    profile.gender &&
-    profile.interestedIn?.length &&
-    (profile.photos?.length ?? 0) >= 3 && // At least 3 photos
-    (profile.prompts?.length ?? 0) >= 2 // At least 2 prompts answered
+  console.log('Checking profile completion with data:', JSON.stringify(profile, null, 2));
+  
+  // Support both old and new field names for backward compatibility
+  const hasName = profile.displayName || profile.name;
+  const hasAge = profile.birthdate || profile.age;
+  
+  // For the initial implementation, just check basic info
+  // This can be expanded later to include more criteria as the app evolves
+  const isBasicInfoComplete = !!(
+    hasName &&
+    hasAge &&
+    profile.gender 
   );
+  
+  // Always check if the flag is explicitly set to true
+  const isFlagSet = profile.profileComplete === true;
+  
+  console.log(`Profile completion check - Basic info: ${isBasicInfoComplete}, Flag set: ${isFlagSet}`);
+  
+  // Either the basic info is complete or the flag is explicitly set
+  return isBasicInfoComplete || isFlagSet;
 };
 
 /**

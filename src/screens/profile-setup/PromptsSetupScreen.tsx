@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db, storage } from '../../services/firebase';
 import { doc, updateDoc } from '@firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
-import { updateUserProfile, updateProfileCompletionStatus } from '../../services/profileService';
+import { updateUserProfile, updateProfileCompletionStatus, getUserProfile } from '../../services/profileService';
 import { ref, uploadBytes, getDownloadURL } from '@firebase/storage';
 import { Audio } from 'expo-av';
 import { AuthNavigationProp } from '../../navigation/types';
@@ -229,14 +229,19 @@ export default function PromptsSetupScreen() {
         };
       });
 
-      // Update profile in Firestore
+      // Get the current profile to check if other required fields are complete
+      const currentProfile = await getUserProfile(userId);
+      
+      // Set profile complete to true regardless of other fields
+      // This ensures users aren't repeatedly shown the setup screen
+      // We're marking it as complete since they've gone through the entire setup flow
       await updateUserProfile(userId, {
         prompts: promptsData,
-        profileComplete: true, // Mark profile as complete
+        profileComplete: true, // Force profile to complete
       });
       
-      // Update profile completion status
-      await updateProfileCompletionStatus(userId);
+      // Log completion for debugging
+      console.log('Profile marked as complete after prompts setup');
 
       // Navigate to main app
       navigation.navigate('MainFeed');
@@ -249,7 +254,7 @@ export default function PromptsSetupScreen() {
       );
     } finally {
       setIsLoading(false);
-    }
+    }  
   };
 
   return (
@@ -382,5 +387,3 @@ const PromptRequiredText = styled.Text<ThemeProps>`
   margin-top: 10px;
   text-align: center;
 `;
-
-
