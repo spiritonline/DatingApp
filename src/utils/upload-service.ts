@@ -45,7 +45,7 @@ export const uploadFile = async (
   const timestamp = Date.now();
   const uniqueId = Math.floor(Math.random() * 1000000);
   const uniqueFileName = `photo-${timestamp}-${uniqueId}.${extension || 'jpg'}`;
-  const storagePath = `${path}/${userId}/${uniqueFileName}`;
+  const storagePath = `${path}/${uniqueFileName}`; // Path can include chatId and userId already
   
   console.log(`Creating storage ref for path: ${storagePath}`);
   const storageRef = ref(storage, storagePath);

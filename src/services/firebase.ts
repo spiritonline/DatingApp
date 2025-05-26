@@ -56,7 +56,7 @@ try {
   console.log(`Current storage bucket: ${(storage as any)._bucket || 'unknown'}`);
   
   // Check if we're in development/emulator mode
-  if (__DEV__ && false) { // Set to true to use emulator
+  if (__DEV__ && process.env.USE_FIREBASE_EMULATOR === 'true') { // Set USE_FIREBASE_EMULATOR=true in .env to use emulator
     connectStorageEmulator(storage, '127.0.0.1', 9199);
     console.log('Connected to Firebase Storage emulator');
   }

@@ -28,6 +28,12 @@ export interface ChatMessage {
   };
   participantNames?: Record<string, string>; // Added to ensure consistency with ChatPreview
   reactions?: Record<string, string[]>;
+  mediaUrl?: string;
+  thumbnailUrl?: string; // For videos
+  caption?: string;
+  mediaType?: 'image' | 'video';
+  duration?: number; // For videos, in seconds
+  dimensions?: { width: number; height: number }; // For images and videos
 }
 
 export interface ChatPreview {
@@ -39,6 +45,7 @@ export interface ChatPreview {
     senderId: string;
     timestamp: any;
     type: 'text' | 'image' | 'video' | 'audio';
+    mediaType?: 'image' | 'video'; // Added for consistency
     replyTo?: ChatMessage['replyTo']; // Include replyTo in lastMessage as well
   };
   isTestChat?: boolean;
@@ -174,6 +181,12 @@ export async function sendMessage(
       content: string;
       senderId: string;
     };
+    mediaUrl?: string;
+    thumbnailUrl?: string;
+    caption?: string;
+    duration?: number;
+    dimensions?: { width: number; height: number };
+    fileName?: string; // Optional: if you want to store original filename
   }
 ): Promise<boolean> {
   try {
@@ -196,9 +209,23 @@ export async function sendMessage(
       type: messageData.type || 'text',
       createdAt: serverTimestamp(),
       isRead: false,
-      status: 'sending',
+      status: 'sending', // Initial status for optimistic UI
       ...(replyTo ? { replyTo } : {})
     };
+
+    // Add media fields if present
+    if (messageData.type === 'image' || messageData.type === 'video') {
+      Object.assign(finalMessageData, {
+        mediaUrl: messageData.mediaUrl || null,
+        thumbnailUrl: messageData.thumbnailUrl || null,
+        caption: messageData.caption || null,
+        mediaType: messageData.type, // Redundant but consistent
+        duration: messageData.duration || null,
+        dimensions: messageData.dimensions || null,
+        fileName: messageData.fileName || null,
+        // fileSize can also be added if available
+      });
+    }
     
     console.log('[chatService] Creating message with data:', JSON.stringify(finalMessageData));
     
@@ -217,6 +244,7 @@ export async function sendMessage(
         senderId: currentUserId,
         timestamp: serverTimestamp(),
         type: messageData.type || 'text',
+        mediaType: (messageData.type === 'image' || messageData.type === 'video') ? messageData.type : undefined,
         ...(replyTo ? { replyTo } : {}),
       },
       updatedAt: serverTimestamp(),
@@ -257,6 +285,12 @@ export function subscribeToMessages(
         reactions: data.reactions || {},
         createdAt: data.createdAt,
         isRead: data.isRead || false,
+        mediaUrl: data.mediaUrl,
+        thumbnailUrl: data.thumbnailUrl,
+        caption: data.caption,
+        mediaType: data.mediaType,
+        duration: data.duration,
+        dimensions: data.dimensions,
         status: data.status || 'sent',
       };
       

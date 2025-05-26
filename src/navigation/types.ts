@@ -18,6 +18,15 @@ export type AuthStackParamList = {
     chatId: string;
     partnerName: string;
   };
+  MediaPreview: {
+    mediaItems: Array<{ uri: string; type: 'image' | 'video'; width?: number; height?: number; duration?: number; fileName?: string }>;
+    chatId: string;
+    replyToMessage?: any; // Consider a more specific type from ChatMessage
+  };
+  ImageViewer: {
+    images: Array<{ id: string; uri: string; caption?: string; width?: number; height?: number }>;
+    initialIndex?: number;
+  };
 };
 
 // Main tab navigation parameter list

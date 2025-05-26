@@ -9,15 +9,15 @@ import {
   Alert,
   View,
   Modal,
-  Pressable,
-  GestureResponderEvent
+  Pressable
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Swipeable, TouchableOpacity as GestureTouchableOpacity } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { auth } from '../services/firebase';
-import { AuthStackParamList } from '../navigation/types';
+import { AuthStackParamList, AuthNavigationProp } from '../navigation/types';
+import * as ImagePicker from 'expo-image-picker';
 import styled from 'styled-components/native';
 import { ThemeProps as BaseThemeProps } from '../utils/styled-components';
 import { useAppTheme } from '../utils/useAppTheme';
@@ -28,14 +28,27 @@ import {
   isTestUser,
   cleanupTestChat,
   toggleReactionOnMessage,
-  ChatMessage as ChatServiceMessage, // Renaming to avoid conflict
 } from '../services/chatService';
+import { Image } from 'expo-image'; // Using expo-image for better performance
+import { Video, ResizeMode } from 'expo-av';
 
 // Constants
 const REPLY_PREVIEW_MAX_LENGTH = 70;
 const REPLY_PANEL_HEIGHT = 60; // Approximate height for animation
 
 type ChatConversationScreenRouteProp = RouteProp<AuthStackParamList, 'ChatConversation'>;
+
+// Media item type for navigation
+// Interface used for media items being passed to the MediaPreview screen
+// This is used in the navigation params for MediaPreview screen
+export interface MediaItem {
+  uri: string;
+  type: 'image' | 'video';
+  width?: number;
+  height?: number;
+  duration?: number;
+  fileName?: string;
+}
 
 interface Message {
   id: string;
@@ -50,11 +63,17 @@ interface Message {
     senderId: string;
   };
   reactions?: Record<string, string[]>; // emoji: [userId1, userId2]
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  caption?: string;
+  mediaType?: 'image' | 'video';
+  dimensions?: { width: number; height: number };
+  duration?: number;
 }
 
 export default function ChatConversationScreen() {
-  const { isDark, colors } = useAppTheme();
-  const navigation = useNavigation();
+  const { isDark } = useAppTheme();
+  const navigation = useNavigation<AuthNavigationProp>();
   const route = useRoute<ChatConversationScreenRouteProp>();
   const { chatId, partnerName } = route.params;
   
@@ -63,12 +82,17 @@ export default function ChatConversationScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isTestChatScreen, setIsTestChatScreen] = useState(false);
-  
+
   // Reaction state
   const [reactionModalVisible, setReactionModalVisible] = useState(false);
   const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Message | null>(null);
-  const [reactionModalPosition, setReactionModalPosition] = useState({ x: 0, y: 0 });
+  const [reactionModalPosition] = useState({ x: 0, y: 0 });
   const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+  // Media sending states
+  const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
+  const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
+  const [viewingMedia, setViewingMedia] = useState<Message | null>(null);
 
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -76,7 +100,7 @@ export default function ChatConversationScreen() {
   const flatListRef = useRef<FlatList>(null);
   const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
   // Using MutableRefObject to avoid type errors with refs
-  const messageRefs = useRef<Record<string, View | null>>({});
+  const messageRefs = useRef<Record<string, (View | null)>>({});
   const currentUser = auth.currentUser;
 
   // Animation for reply panel
@@ -126,11 +150,23 @@ export default function ChatConversationScreen() {
   // Effect to handle reply panel animation
   useEffect(() => {
     if (replyToMessage) {
-      replyPanelAnimHeight.value = withTiming(REPLY_PANEL_HEIGHT, { duration: 200, easing: Easing.out(Easing.quad) });
-      replyPanelAnimOpacity.value = withTiming(1, { duration: 200 });
+      replyPanelAnimHeight.value = withTiming(REPLY_PANEL_HEIGHT, { 
+        duration: 100, 
+        easing: Easing.out(Easing.exp) 
+      });
+      replyPanelAnimOpacity.value = withTiming(1, { 
+        duration: 100,
+        easing: Easing.out(Easing.exp)
+      });
     } else {
-      replyPanelAnimHeight.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) });
-      replyPanelAnimOpacity.value = withTiming(0, { duration: 200 });
+      replyPanelAnimHeight.value = withTiming(0, { 
+        duration: 100, 
+        easing: Easing.in(Easing.exp) 
+      });
+      replyPanelAnimOpacity.value = withTiming(0, { 
+        duration: 100,
+        easing: Easing.in(Easing.exp)
+      });
     }
   }, [replyToMessage, replyPanelAnimHeight, replyPanelAnimOpacity]);
 
@@ -268,31 +304,17 @@ export default function ChatConversationScreen() {
     return () => clearTimeout(timer);
   }, [highlightedMessageId]);
 
-  const handleLongPressMessage = (message: Message, event?: GestureResponderEvent) => {
-    // Add safety check for event parameter
-    if (!event || !event.nativeEvent) {
-      // Default position if event is not available
-      setReactionModalPosition({ x: 0, y: 250 });
-      setSelectedMessageForReaction(message);
-      setReactionModalVisible(true);
-      return;
-    }
+  const handleLongPressMessage = (_message: Message) => {
+    // Measure the position of the message container to position the reaction menu
+    // Position values are not currently used with the current UI implementation
     
-    const { pageY } = event.nativeEvent;
-    // Try to get message position using its ref for more accuracy if available
-    const messageView = messageRefs.current[message.id];
-    if (messageView) {
-      messageView.measure((_x, _y, _width, _height, _pageX, pageYOnScreen) => {
-        setReactionModalPosition({ x: 0, y: pageYOnScreen - 70 }); // Position above the message
-      });
+    if (selectedMessageForReaction !== null) {
+      setReactionModalVisible(false);
+      setSelectedMessageForReaction(null);
     } else {
-      setReactionModalPosition({ x: 0, y: pageY - 100 }); // Fallback using event Y
+      setSelectedMessageForReaction(_message);
+      setReactionModalVisible(true);
     }
-
-    setSelectedMessageForReaction(message);
-    setReactionModalVisible(true);
-    // Optional: Haptic feedback
-    // Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const handleSelectReaction = async (emoji: string) => {
@@ -307,7 +329,111 @@ export default function ChatConversationScreen() {
     setSelectedMessageForReaction(null);
   };
 
+  // This function requests permissions but is currently not used directly
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _requestPermissions = async () => {
+    try {
+      // Request camera permissions
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      
+      // Request media library permissions
+      const { status: mediaLibraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (cameraStatus !== 'granted' || mediaLibraryStatus !== 'granted') {
+        Alert.alert(
+          'Permissions Required', 
+          'Camera and media library permissions are required to send photos and videos.'
+        );
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      Alert.alert('Error', 'Failed to request permissions');
+      return false;
+    }
+  };
 
+  const handlePickMedia = async (type: 'gallery' | 'camera') => {
+    try {
+      // Request permissions
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+      const mediaLibraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (type === 'camera' && cameraPermission.status !== 'granted') {
+        Alert.alert(
+          'Camera Permission Required', 
+          'Please grant camera permissions to take photos.'
+        );
+        return;
+      }
+      
+      if (type === 'gallery' && mediaLibraryPermission.status !== 'granted') {
+        Alert.alert(
+          'Media Library Permission Required', 
+          'Please grant media library permissions to select photos.'
+        );
+        return;
+      }
+      
+      // Configure picker options
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: false,
+        aspect: [4, 3],
+        quality: 0.8,
+        allowsMultipleSelection: type === 'gallery'
+      };
+      
+      // Launch the appropriate picker
+      let result: ImagePicker.ImagePickerResult;
+      
+      if (type === 'gallery') {
+        result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
+      } else {
+        result = await ImagePicker.launchCameraAsync(pickerOptions);
+      }
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedItems = result.assets;
+        
+        // Prepare navigation params
+        const mediaItems = selectedItems.map((item) => {
+          // Normalize type to only be 'image' or 'video' to match MediaItem interface
+          let normalizedType: 'image' | 'video';
+          if (item.type === 'video' || (item.uri?.match(/\.(mp4|mov)$/i))) {
+            normalizedType = 'video';
+          } else {
+            // Treat 'livePhoto', 'pairedVideo', and any other types as 'image'
+            normalizedType = 'image';
+          }
+          
+          return {
+            uri: item.uri,
+            type: normalizedType,
+            width: item.width || 0,
+            height: item.height || 0,
+            duration: item.duration !== null ? item.duration : undefined,
+          };
+        });
+        
+        // Add a small delay to ensure any pending operations complete before navigation
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        navigation.navigate('MediaPreview', {
+          mediaItems,
+          chatId,
+          replyToMessage
+        });
+      }
+    } catch (error) {
+      Alert.alert(
+        'Error', 
+        `Could not access ${type.startsWith('camera') ? 'camera' : 'gallery'}.\n\n` +
+        `${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  };
 
   const getDisplayNameForReply = (senderId: string) => {
     return senderId === currentUser?.uid ? "You" : partnerName;
@@ -395,19 +521,18 @@ export default function ChatConversationScreen() {
                     friction={1.5}
                   >
                     <GestureTouchableOpacity
-                      // Using type assertion to fix the TypeScript error
-                      onLongPress={((event?: GestureResponderEvent) => {
-                        handleLongPressMessage(item, event);
-                      }) as unknown as ((event: GestureResponderEvent) => void) & (() => void)}
+                      onLongPress={() => handleLongPressMessage(item)}
                       delayLongPress={300}
                       activeOpacity={0.8}
                     >
                       <View 
-                        // Simply assign the ref without returning anything
-                        ref={(ref: View | null) => { 
-                          if (ref) messageRefs.current[item.id] = ref; 
-                        }}>
-                      
+                          // The ref should be assigned to the outermost touchable component
+                          // or its direct child View if that's what's being measured.
+                          // If GestureTouchableOpacity is sufficient, this inner View might not be needed for ref.
+                          ref={(ref) => { 
+                            if (ref) messageRefs.current[item.id] = ref; 
+                          }}
+                        >
                         <MessageContainer 
                           isCurrentUser={isCurrentUser}
                           testID={isCurrentUser ? 'sent-message' : 'received-message'}
@@ -427,18 +552,97 @@ export default function ChatConversationScreen() {
                                 </ReplyContextText>
                               </ReplyContextContainer>
                             )}
-                            <MessageText isDark={isDark} isCurrentUser={isCurrentUser}>
-                              {item.content}
-                            </MessageText>
+                            {item.mediaType === 'image' && item.mediaUrl ? (
+                              <TouchableOpacity 
+                                onPress={() => {
+                                  try {
+                                    console.log('Image pressed, preparing to open fullscreen viewer');
+                                    
+                                    // Create an array of image items from all images in the current chat
+                                    const chatImages = messages
+                                      .filter(msg => msg.mediaType === 'image' && msg.mediaUrl)
+                                      .map(msg => ({
+                                        id: msg.id,
+                                        uri: msg.mediaUrl!,
+                                        caption: msg.caption,
+                                        width: msg.dimensions?.width,
+                                        height: msg.dimensions?.height
+                                      }));
+                                    
+                                    console.log(`Found ${chatImages.length} images in conversation`);
+                                    
+                                    // Find the index of the current image in the array
+                                    const currentImageIndex = chatImages.findIndex(img => img.id === item.id);
+                                    console.log(`Current image index: ${currentImageIndex}`);
+                                    
+                                    // Show debug alert to confirm data before navigation
+                                    Alert.alert(
+                                      'Debug', 
+                                      `Preparing to navigate to ImageViewer\nFound ${chatImages.length} images\nCurrent index: ${currentImageIndex}`, 
+                                      [
+                                        { 
+                                          text: 'Cancel', 
+                                          style: 'cancel'
+                                        },
+                                        {
+                                          text: 'Open Viewer',
+                                          onPress: () => {
+                                            // Navigate to the fullscreen image viewer
+                                            console.log('Attempting to navigate to ImageViewer screen');
+                                            navigation.navigate('ImageViewer', {
+                                              images: chatImages,
+                                              initialIndex: currentImageIndex >= 0 ? currentImageIndex : 0
+                                            });
+                                            console.log('Navigation to ImageViewer called');
+                                          }
+                                        }
+                                      ]
+                                    );
+                                  } catch (error) {
+                                    console.error('Error opening image viewer:', error);
+                                    Alert.alert('Error', `Could not open image viewer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                                  }
+                                }}
+                                accessibilityRole="button"
+                                accessibilityLabel="View image fullscreen"
+                              >
+                                <StyledImage 
+                                  source={{ uri: item.mediaUrl }} 
+                                  isDark={isDark} 
+                                  isCurrentUser={isCurrentUser} 
+                                  contentFit="cover"
+                                />
+                                {item.caption && <CaptionText isDark={isDark} isCurrentUser={isCurrentUser}>{item.caption}</CaptionText>}
+                              </TouchableOpacity>
+                            ) : item.mediaType === 'video' && (item.mediaUrl || item.thumbnailUrl) ? (
+                              <TouchableOpacity onPress={() => { setViewingMedia(item); setIsMediaViewerVisible(true); }}>
+                                <VideoPreviewContainer isDark={isDark} isCurrentUser={isCurrentUser}>
+                                  <StyledImage 
+                                    source={{ uri: item.thumbnailUrl || item.mediaUrl }} // Use mediaUrl as fallback for thumbnail
+                                    isDark={isDark} 
+                                    isCurrentUser={isCurrentUser} 
+                                    contentFit="cover"
+                                  />
+                                  <PlayIconOverlay>
+                                    <PlayIconText>▶</PlayIconText>
+                                  </PlayIconOverlay>
+                                </VideoPreviewContainer>
+                                {item.caption && <CaptionText isDark={isDark} isCurrentUser={isCurrentUser}>{item.caption}</CaptionText>}
+                              </TouchableOpacity>
+                            ) : (
+                              <MessageText isDark={isDark} isCurrentUser={isCurrentUser}>
+                                {item.content}
+                              </MessageText>
+                            )}
                             <MessageTime isDark={isDark} isCurrentUser={isCurrentUser}>
                               {formatTime(item.createdAt)}
                             </MessageTime>
                             {item.reactions && Object.keys(item.reactions).length > 0 && (
                               <ReactionsContainer>
                                 {Object.entries(item.reactions || {}).map(([emoji, userIds]) => {
-                                  // Properly type userIds as string[] to avoid 'unknown' type errors
-                                  const users = userIds as string[];
-                                  return users && users.length > 0 ? (
+                                  // Properly type userIds and check for presence
+                                  const users = Array.isArray(userIds) ? userIds : [];
+                                  return users.length > 0 ? (
                                     <ReactionPill key={emoji}>
                                       <ReactionEmoji>{emoji}</ReactionEmoji>
                                       <ReactionCount>{users.length}</ReactionCount>
@@ -495,16 +699,19 @@ export default function ChatConversationScreen() {
         </Animated.View>
         <InputOuterContainer>
           <InputContainer isDark={isDark}>
-          <MessageInput
-            value={inputMessage}
-            onChangeText={setInputMessage}
-            placeholder="Type a message..."
-            placeholderTextColor={isDark ? '#777777' : '#999999'}
-            isDark={isDark}
-            multiline
-            testID="message-input"
-          />
-          <SendButton 
+            <AttachmentButton onPress={() => setAttachmentMenuVisible(true)} testID="attachment-button">
+              <AttachmentIcon isDark={isDark}>📎</AttachmentIcon>
+            </AttachmentButton>
+            <MessageInput
+              value={inputMessage}
+              onChangeText={setInputMessage}
+              placeholder="Type a message..."
+              placeholderTextColor={isDark ? '#777777' : '#999999'}
+              isDark={isDark}
+              multiline
+              testID="message-input"
+            />
+            <SendButton 
             onPress={sendMessage}
             disabled={!inputMessage.trim() || isSending}
             accessibilityLabel="Send message"
@@ -512,8 +719,8 @@ export default function ChatConversationScreen() {
             testID="send-button"
           >
             <SendButtonText>{isSending ? 'Sending...' : 'Send'}</SendButtonText>
-          </SendButton>
-        </InputContainer>
+            </SendButton>
+          </InputContainer>
         </InputOuterContainer>
       </KeyboardAvoidingView>
 
@@ -558,6 +765,61 @@ export default function ChatConversationScreen() {
           </Animated.View>
         </Pressable>
       </Modal>
+
+      {/* Attachment Menu Modal */}
+      <Modal
+        transparent
+        visible={attachmentMenuVisible}
+        onRequestClose={() => setAttachmentMenuVisible(false)}
+        animationType="slide"
+      >
+        <AttachmentMenuOverlay onPress={() => setAttachmentMenuVisible(false)}>
+          <AttachmentMenuContent isDark={isDark}>
+            <AttachmentMenuButton onPress={() => handlePickMedia('camera')}>
+              <AttachmentMenuButtonText isDark={isDark}>Take Photo</AttachmentMenuButtonText>
+            </AttachmentMenuButton>
+            <AttachmentMenuButton onPress={() => handlePickMedia('gallery')}>
+              <AttachmentMenuButtonText isDark={isDark}>Choose from Gallery</AttachmentMenuButtonText>
+            </AttachmentMenuButton>
+            <AttachmentMenuButton onPress={() => setAttachmentMenuVisible(false)} style={{ marginTop: 10 }}>
+              <AttachmentMenuButtonText isDark={isDark} style={{ color: 'red' }}>Cancel</AttachmentMenuButtonText>
+            </AttachmentMenuButton>
+          </AttachmentMenuContent>
+        </AttachmentMenuOverlay>
+      </Modal>
+
+      {/* Full Screen Media Viewer Modal */}
+      {viewingMedia && (
+        <Modal
+          visible={isMediaViewerVisible}
+          transparent={false}
+          onRequestClose={() => setIsMediaViewerVisible(false)}
+          animationType="fade"
+        >
+          <MediaViewerContainer isDark={isDark}>
+            <CloseButton onPress={() => setIsMediaViewerVisible(false)}>
+              <CloseButtonText isDark={isDark}>✕</CloseButtonText>
+            </CloseButton>
+            {viewingMedia.mediaType === 'image' && viewingMedia.mediaUrl && (
+              <Image
+                source={{ uri: viewingMedia.mediaUrl }}
+                style={{ flex: 1, width: '100%' }}
+                contentFit="contain"
+              />
+            )}
+            {viewingMedia.mediaType === 'video' && viewingMedia.mediaUrl && (
+              <Video
+                source={{ uri: viewingMedia.mediaUrl }}
+                style={{ flex: 1, width: '100%' }}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+              />
+            )}
+            {viewingMedia.caption && <MediaCaptionText isDark={isDark}>{viewingMedia.caption}</MediaCaptionText>}
+          </MediaViewerContainer>
+        </Modal>
+      )}
     </Container>
   );
 }
@@ -688,12 +950,44 @@ const MessageBubble = styled.View<MessageProps>`
       : props.isDark ? '#2C2C2C' : '#F0F0F0'};
 `;
 
+const StyledImage = styled(Image)<MessageProps>`
+  width: 200px;
+  height: 150px;
+  border-radius: 10px;
+  margin-bottom: ${(props: MessageProps) => (props.isCurrentUser || props.isDark) ? '4px' : '0px'}; /* Add margin if caption exists */
+`;
+
+const VideoPreviewContainer = styled.View<MessageProps>`
+  width: 200px;
+  height: 150px;
+  border-radius: 10px;
+  justify-content: center;
+  align-items: center;
+  background-color: ${(props: MessageProps) => props.isDark ? '#333' : '#e0e0e0'};
+`;
+
+const PlayIconOverlay = styled.View`
+  position: absolute;
+`;
+
+const PlayIconText = styled.Text`
+  font-size: 40px;
+  color: rgba(255, 255, 255, 0.8);
+`;
+
 const MessageText = styled.Text<MessageProps>`
   font-size: 16px;
   color: ${(props: MessageProps) => 
     props.isCurrentUser 
       ? '#FFFFFF' 
       : props.isDark ? '#FFFFFF' : '#000000'};
+`;
+
+const CaptionText = styled.Text<MessageProps>`
+  font-size: 14px;
+  padding-top: 4px;
+  color: ${(props: MessageProps) => 
+    props.isCurrentUser ? 'rgba(255, 255, 255, 0.9)' : (props.isDark ? '#DDDDDD' : '#333333')};
 `;
 
 const MessageTime = styled.Text<MessageProps>`
@@ -764,6 +1058,17 @@ const InputContainer = styled.View<ThemeProps>`
   background-color: ${(props: ThemeProps) => props.isDark ? '#1E1E1E' : '#FFFFFF'};
 `;
 
+const AttachmentButton = styled.TouchableOpacity`
+  padding: 10px;
+  margin-right: 8px;
+`;
+
+const AttachmentIcon = styled.Text<ThemeProps>`
+  font-size: 22px;
+  color: ${(props: ThemeProps) => props.isDark ? '#FFF' : '#000'};
+`;
+
+
 const MessageInput = styled.TextInput<ThemeProps>`
   flex: 1;
   min-height: 40px;
@@ -785,4 +1090,62 @@ const SendButton = styled.TouchableOpacity<{ disabled?: boolean }>`
 const SendButtonText = styled.Text`
   color: #FFFFFF;
   font-weight: bold;
+`;
+
+const AttachmentMenuOverlay = styled.Pressable`
+  flex: 1;
+  justify-content: flex-end;
+  background-color: rgba(0,0,0,0.4);
+`;
+
+const AttachmentMenuContent = styled.View<ThemeProps>`
+  background-color: ${(props: ThemeProps) => props.isDark ? '#1E1E1E' : '#FFFFFF'};
+  padding: 16px;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  padding-bottom: ${Platform.OS === 'ios' ? 30 : 16}px; /* Safe area for iOS bottom */
+`;
+
+const AttachmentMenuButton = styled.TouchableOpacity`
+  padding: 12px;
+  align-items: center;
+`;
+
+const AttachmentMenuButtonText = styled.Text<ThemeProps>`
+  font-size: 18px;
+  color: ${(props: ThemeProps) => props.isDark ? '#FFFFFF' : '#007AFF'};
+`;
+
+const MediaViewerContainer = styled.View<ThemeProps>`
+  flex: 1;
+  background-color: ${(props: ThemeProps) => props.isDark ? '#000' : '#FFF'};
+  justify-content: center;
+  align-items: center;
+`;
+
+const CloseButton = styled.TouchableOpacity`
+  position: absolute;
+  top: ${Platform.OS === 'ios' ? 50 : 20}px;
+  right: 20px;
+  padding: 10px;
+  z-index: 1;
+`;
+
+const CloseButtonText = styled.Text<ThemeProps>`
+  font-size: 24px;
+  font-weight: bold;
+  color: ${(props: ThemeProps) => props.isDark ? '#FFF' : '#000'};
+`;
+
+const MediaCaptionText = styled.Text<ThemeProps>`
+  position: absolute;
+  bottom: ${Platform.OS === 'ios' ? 40 : 20}px;
+  left: 20px;
+  right: 20px;
+  padding: 10px;
+  background-color: rgba(0,0,0,0.5);
+  color: #FFF;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 16px;
 `;

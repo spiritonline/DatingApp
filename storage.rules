@@ -12,5 +12,13 @@ service firebase.storage {
     match /profiles/{userId}/{allPaths=**} {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
+    
+    // Allow write access to chat media for authenticated users
+    // This allows users to upload to chat conversations they're participating in
+    // by checking if their user ID is part of the chat ID
+    match /chat_media/{chatId}/{allPaths=**} {
+      allow write: if request.auth != null && 
+                     (chatId.matches('.*' + request.auth.uid + '.*'));
+    }
   }
 }
