@@ -607,7 +607,22 @@
 <a name='L542'></a><a href='#L542'>542</a>
 <a name='L543'></a><a href='#L543'>543</a>
 <a name='L544'></a><a href='#L544'>544</a>
-<a name='L545'></a><a href='#L545'>545</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L545'></a><a href='#L545'>545</a>
+<a name='L546'></a><a href='#L546'>546</a>
+<a name='L547'></a><a href='#L547'>547</a>
+<a name='L548'></a><a href='#L548'>548</a>
+<a name='L549'></a><a href='#L549'>549</a>
+<a name='L550'></a><a href='#L550'>550</a>
+<a name='L551'></a><a href='#L551'>551</a>
+<a name='L552'></a><a href='#L552'>552</a>
+<a name='L553'></a><a href='#L553'>553</a>
+<a name='L554'></a><a href='#L554'>554</a>
+<a name='L555'></a><a href='#L555'>555</a>
+<a name='L556'></a><a href='#L556'>556</a>
+<a name='L557'></a><a href='#L557'>557</a>
+<a name='L558'></a><a href='#L558'>558</a>
+<a name='L559'></a><a href='#L559'>559</a>
+<a name='L560'></a><a href='#L560'>560</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -946,6 +961,25 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1077,17 +1111,13 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1489,15 +1519,34 @@ function <span class="fstat-no" title="function not covered" >DiscoverScreen(</s
   );
 }
 &nbsp;
+// Define specific prop types for styled components in this screen
+interface ActionButtonStyledProps extends ThemeProps {
+  primary?: boolean;
+  secondary?: boolean;
+}
+&nbsp;
+interface ModalButtonStyledProps extends ThemeProps {
+  secondary?: boolean;
+  disabled?: boolean;
+}
+&nbsp;
+interface CharacterCounterStyledProps extends ThemeProps {
+  isValid: boolean;
+}
+&nbsp;
+interface ProfilePhotoStyledProps extends ThemeProps {
+  width: number;
+}
+&nbsp;
 // Styled components
 const Container = <span class="cstat-no" title="statement not covered" >styled(SafeAreaView)&lt;ThemeProps&gt;`</span>
   flex: 1;
-  background-color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#121212' : '#ffffff'}</span>;
+  background-color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#121212' : '#ffffff'}</span>;
 `;
 &nbsp;
-const ProfilePhoto = <span class="cstat-no" title="statement not covered" >styled.Image&lt;{ width: number }&gt;`</span>
-  width: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.width}</span>px;
-  height: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.width * 1.3}</span>px;
+const ProfilePhoto = <span class="cstat-no" title="statement not covered" >styled.Image&lt;ProfilePhotoStyledProps&gt;`</span>
+  width: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ProfilePhotoStyledProps) =&gt; <span class="cstat-no" title="statement not covered" >props.width}</span>px;
+  height: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ProfilePhotoStyledProps) =&gt; <span class="cstat-no" title="statement not covered" >props.width * 1.3}</span>px;
 `;
 &nbsp;
 const ProfileInfoContainer = <span class="cstat-no" title="statement not covered" >styled.View`</span>
@@ -1507,7 +1556,7 @@ const ProfileInfoContainer = <span class="cstat-no" title="statement not covered
 const NameAgeText = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps&gt;`</span>
   font-size: 28px;
   font-weight: bold;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#ffffff' : '#000000'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#ffffff' : '#000000'}</span>;
 `;
 &nbsp;
 const MutualFriendsContainer = <span class="cstat-no" title="statement not covered" >styled.View`</span>
@@ -1518,26 +1567,26 @@ const MutualFriendsContainer = <span class="cstat-no" title="statement not cover
 &nbsp;
 const MutualFriendsText = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps&gt;`</span>
   font-size: 14px;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#cccccc' : '#666666'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#cccccc' : '#666666'}</span>;
 `;
 &nbsp;
 const PromptContainer = <span class="cstat-no" title="statement not covered" >styled.View&lt;ThemeProps&gt;`</span>
   margin: 8px 16px 24px;
   padding: 16px;
   border-radius: 12px;
-  background-color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#222222' : '#f5f5f5'}</span>;
+  background-color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#222222' : '#f5f5f5'}</span>;
 `;
 &nbsp;
 const PromptLabel = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps&gt;`</span>
   font-size: 16px;
   font-weight: bold;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#ffffff' : '#000000'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#ffffff' : '#000000'}</span>;
   margin-bottom: 8px;
 `;
 &nbsp;
 const PromptAnswer = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps&gt;`</span>
   font-size: 16px;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#cccccc' : '#333333'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#cccccc' : '#333333'}</span>;
   line-height: 22px;
 `;
 &nbsp;
@@ -1549,24 +1598,24 @@ const FooterContainer = <span class="cstat-no" title="statement not covered" >st
   flex-direction: row;
   justify-content: space-around;
   padding: 16px;
-  background-color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? 'rgba(18, 18, 18, 0.95)' : 'rgba(255, 255, 255, 0.95)'}</span>;
+  background-color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? 'rgba(18, 18, 18, 0.95)' : 'rgba(255, 255, 255, 0.95)'}</span>;
   ${Platform.OS === 'ios' ? 'padding-bottom: 32px;' : ''}
 `;
 &nbsp;
-const ActionButton = <span class="cstat-no" title="statement not covered" >styled.TouchableOpacity&lt;{ primary?: boolean; secondary?: boolean }&gt;`</span>
+const ActionButton = <span class="cstat-no" title="statement not covered" >styled.TouchableOpacity&lt;ActionButtonStyledProps&gt;`</span>
   width: 60px;
   height: 60px;
   border-radius: 30px;
   justify-content: center;
   align-items: center;
-  background-color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; 
+  background-color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ActionButtonStyledProps) =&gt;
 <span class="cstat-no" title="statement not covered" >    props.primary ? '#FF6B6B' : </span>
     props.secondary ? '#FFD700' : '#FFFFFF'};
   elevation: 3;
+  shadow-opacity: 0.3;
+  shadow-radius: 5px;
   shadow-color: #000;
   shadow-offset: 0px 2px;
-  shadow-opacity: 0.2;
-  shadow-radius: 4px;
 `;
 &nbsp;
 const ActionButtonText = <span class="cstat-no" title="statement not covered" >styled.Text`</span>
@@ -1585,19 +1634,19 @@ const ModalContainer = <span class="cstat-no" title="statement not covered" >sty
   width: 100%;
   padding: 24px;
   border-radius: 12px;
-  background-color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#222222' : '#ffffff'}</span>;
+  background-color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#222222' : '#ffffff'}</span>;
 `;
 &nbsp;
 const ModalTitle = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps&gt;`</span>
   font-size: 20px;
   font-weight: bold;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#ffffff' : '#000000'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#ffffff' : '#000000'}</span>;
   margin-bottom: 8px;
 `;
 &nbsp;
 const ModalSubtitle = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps&gt;`</span>
   font-size: 14px;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#cccccc' : '#666666'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#cccccc' : '#666666'}</span>;
   margin-bottom: 16px;
 `;
 &nbsp;
@@ -1606,16 +1655,16 @@ const TextLikeInput = <span class="cstat-no" title="statement not covered" >styl
   border-radius: 8px;
   padding: 12px;
   font-size: 16px;
-  border: 1px solid ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#444' : '#ddd'}</span>;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#ffffff' : '#000000'}</span>;
-  background-color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#333333' : '#f9f9f9'}</span>;
+  border: 1px solid ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#444' : '#ddd'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#ffffff' : '#000000'}</span>;
+  background-color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#333333' : '#f9f9f9'}</span>;
 `;
 &nbsp;
-const CharacterCounter = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps &amp; { isValid: boolean }&gt;`</span>
+const CharacterCounter = <span class="cstat-no" title="statement not covered" >styled.Text&lt;CharacterCounterStyledProps&gt;`</span>
   align-self: flex-end;
   margin-top: 8px;
   font-size: 12px;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isValid ? </span>
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: CharacterCounterStyledProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isValid ?</span>
     (props.isDark ? '#8BC34A' : '#4CAF50') : 
     (props.isDark ? '#FF8A80' : '#F44336')};
 `;
@@ -1626,22 +1675,18 @@ const ModalButtonsContainer = <span class="cstat-no" title="statement not covere
   margin-top: 24px;
 `;
 &nbsp;
-interface ModalButtonProps {
-  secondary?: boolean;
-  disabled?: boolean;
-}
-&nbsp;
-const ModalButton = <span class="cstat-no" title="statement not covered" >styled.TouchableOpacity&lt;ModalButtonProps&gt;`</span>
+const ModalButton = <span class="cstat-no" title="statement not covered" >styled.TouchableOpacity&lt;ModalButtonStyledProps&gt;`</span>
   flex: 0.48;
   height: 50px;
   border-radius: 25px;
+  padding: 0 20px;
   justify-content: center;
   align-items: center;
-  background-color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; 
-<span class="cstat-no" title="statement not covered" >    props.secondary ? 'transparent' : </span>
+  background-color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ModalButtonStyledProps) =&gt; 
+<span class="cstat-no" title="statement not covered" >    props.secondary ? 'transparent' :</span>
     props.disabled ? '#999999' : '#FF6B6B'};
-  border: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.secondary ? '1px solid #FF6B6B' : 'none'}</span>;
-  opacity: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.disabled ? 0.7 : 1}</span>;
+  border: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ModalButtonStyledProps) =&gt; <span class="cstat-no" title="statement not covered" >props.secondary ? '1px solid #FF6B6B' : 'none'}</span>;
+  opacity: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ModalButtonStyledProps) =&gt; <span class="cstat-no" title="statement not covered" >props.disabled ? 0.7 : 1}</span>;
 `;
 &nbsp;
 const ModalButtonText = <span class="cstat-no" title="statement not covered" >styled.Text`</span>
@@ -1659,7 +1704,7 @@ const LoadingContainer = <span class="cstat-no" title="statement not covered" >s
 const LoadingText = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps&gt;`</span>
   margin-top: 16px;
   font-size: 16px;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#cccccc' : '#666666'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#cccccc' : '#666666'}</span>;
 `;
 &nbsp;
 const LoadingOverlay = <span class="cstat-no" title="statement not covered" >styled.View`</span>
@@ -1680,7 +1725,7 @@ const ErrorContainer = <span class="cstat-no" title="statement not covered" >sty
 &nbsp;
 const ErrorText = <span class="cstat-no" title="statement not covered" >styled.Text&lt;ThemeProps&gt;`</span>
   font-size: 16px;
-  color: ${<span class="fstat-no" title="function not covered" >pr</span>ops =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#FF8A80' : '#F44336'}</span>;
+  color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; <span class="cstat-no" title="statement not covered" >props.isDark ? '#FF8A80' : '#F44336'}</span>;
   margin-bottom: 16px;
 `;
 &nbsp;
@@ -1702,7 +1747,7 @@ const RetryButtonText = <span class="cstat-no" title="statement not covered" >st
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-05-24T21:27:23.490Z
+                at 2025-05-27T09:27:25.181Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

@@ -11,6 +11,7 @@ import VideoIntroScreen from '../screens/VideoIntroScreen';
 import ChatConversationScreen from '../screens/ChatConversationScreen';
 import MediaPreviewScreen from '../screens/MediaPreviewScreen';
 import ImageViewerScreen from '../screens/ImageViewerScreen';
+import DebugImageViewerScreen from '../screens/DebugImageViewerScreen';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
@@ -37,6 +38,7 @@ export function AuthNavigator({ initialRouteName = 'Welcome' }: AuthNavigatorPro
       <Stack.Screen name="VideoIntro" component={VideoIntroScreen} />
       <Stack.Screen name="ChatConversation" component={ChatConversationScreen} />
       <Stack.Screen name="MediaPreview" component={MediaPreviewScreen} />
+      <Stack.Screen name="DebugImageViewer" component={DebugImageViewerScreen} />
       <Stack.Screen 
         name="ImageViewer" 
         component={ImageViewerScreen} 

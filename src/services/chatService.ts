@@ -191,8 +191,24 @@ export async function sendMessage(
 ): Promise<boolean> {
   try {
     const currentUserId = auth.currentUser?.uid;
-    if (!currentUserId || !chatId || !messageData.content || typeof messageData.content !== 'string' || !messageData.content.trim()) {
-      console.error('[chatService] Invalid message data:', messageData);
+    
+    // Check if user is authenticated
+    if (!currentUserId || !chatId) {
+      console.error('[chatService] Missing user ID or chat ID');
+      return false;
+    }
+    
+    // Media message validation (images/videos)
+    if (messageData.type === 'image' || messageData.type === 'video') {
+      if (!messageData.mediaUrl) {
+        console.error('[chatService] Media message missing mediaUrl');
+        return false;
+      }
+      // Content can be empty for media messages, that's fine
+    } 
+    // Text message validation
+    else if (!messageData.content || typeof messageData.content !== 'string' || !messageData.content.trim()) {
+      console.error('[chatService] Text message has invalid content:', messageData);
       return false;
     }
     
@@ -204,8 +220,8 @@ export async function sendMessage(
 
     // Create final message data object with proper structure
     const finalMessageData = {
-      senderId: currentUserId,
-      content: messageData.content.trim(),
+      senderId: currentUserId, // Always use the authenticated user's ID
+      content: messageData.type === 'text' ? (messageData.content || '').trim() : (messageData.content || ''),
       type: messageData.type || 'text',
       createdAt: serverTimestamp(),
       isRead: false,
@@ -240,7 +256,7 @@ export async function sendMessage(
     // Update chat with last message info, including reply data if present
     await updateDoc(chatRef, {
       lastMessage: {
-        content: messageData.content.trim(),
+        content: messageData.type === 'text' ? (messageData.content || '').trim() : (messageData.content || ''),
         senderId: currentUserId,
         timestamp: serverTimestamp(),
         type: messageData.type || 'text',

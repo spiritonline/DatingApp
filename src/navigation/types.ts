@@ -27,6 +27,7 @@ export type AuthStackParamList = {
     images: Array<{ id: string; uri: string; caption?: string; width?: number; height?: number }>;
     initialIndex?: number;
   };
+  DebugImageViewer: undefined;
 };
 
 // Main tab navigation parameter list

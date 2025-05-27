@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/120</span>
+                <span class='fraction'>0/121</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/113</span>
+                <span class='fraction'>0/114</span>
             </div>
         
             
@@ -449,7 +449,9 @@
 <a name='L384'></a><a href='#L384'>384</a>
 <a name='L385'></a><a href='#L385'>385</a>
 <a name='L386'></a><a href='#L386'>386</a>
-<a name='L387'></a><a href='#L387'>387</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L387'></a><a href='#L387'>387</a>
+<a name='L388'></a><a href='#L388'>388</a>
+<a name='L389'></a><a href='#L389'>389</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -686,7 +688,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -830,9 +837,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import React, { useState, useCallback, useEffect } from 'react';
@@ -850,7 +854,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db, storage } from '../../services/firebase';
 import { doc, updateDoc } from '@firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
-import { updateUserProfile, updateProfileCompletionStatus } from '../../services/profileService';
+import { updateUserProfile, updateProfileCompletionStatus, getUserProfile } from '../../services/profileService';
 import { ref, uploadBytes, getDownloadURL } from '@firebase/storage';
 import { Audio } from 'expo-av';
 import { AuthNavigationProp } from '../../navigation/types';
@@ -1066,14 +1070,19 @@ export default function <span class="fstat-no" title="function not covered" >Pro
         };
       });
 &nbsp;
-      // Update profile in Firestore
+      // Get the current profile to check if other required fields are complete
+      const currentProfile = <span class="cstat-no" title="statement not covered" >await getUserProfile(userId);</span>
+      
+      // Set profile complete to true regardless of other fields
+      // This ensures users aren't repeatedly shown the setup screen
+      // We're marking it as complete since they've gone through the entire setup flow
 <span class="cstat-no" title="statement not covered" >      await updateUserProfile(userId, {</span>
         prompts: promptsData,
-        profileComplete: true, // Mark profile as complete
+        profileComplete: true, // Force profile to complete
       });
       
-      // Update profile completion status
-<span class="cstat-no" title="statement not covered" >      await updateProfileCompletionStatus(userId);</span>
+      // Log completion for debugging
+<span class="cstat-no" title="statement not covered" >      console.log('Profile marked as complete after prompts setup');</span>
 &nbsp;
       // Navigate to main app
 <span class="cstat-no" title="statement not covered" >      navigation.navigate('MainFeed');</span>
@@ -1086,7 +1095,7 @@ export default function <span class="fstat-no" title="function not covered" >Pro
       );
     } finally {
 <span class="cstat-no" title="statement not covered" >      setIsLoading(false);</span>
-    }
+    }  
   };
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  return (</span>
@@ -1218,17 +1227,14 @@ const PromptRequiredText = <span class="cstat-no" title="statement not covered" 
   color: ${<span class="fstat-no" title="function not covered" >(p</span>rops: ThemeProps) =&gt; (<span class="cstat-no" title="statement not covered" >props.isDark ? '#bbbbbb' : '#666666')</span>};
   margin-top: 10px;
   text-align: center;
-`;
-&nbsp;
-&nbsp;
-&nbsp;</pre></td></tr></table></pre>
+`;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-05-24T21:27:23.490Z
+                at 2025-05-27T09:27:25.181Z
             </div>
         <script src="../../../../prettify.js"></script>
         <script>

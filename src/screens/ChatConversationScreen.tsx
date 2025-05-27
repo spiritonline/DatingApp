@@ -31,6 +31,7 @@ import {
 } from '../services/chatService';
 import { Image } from 'expo-image'; // Using expo-image for better performance
 import { Video, ResizeMode } from 'expo-av';
+import ImageMessageThumbnail from '../components/ImageMessageThumbnail'; // Import our custom image thumbnail component
 
 // Constants
 const REPLY_PREVIEW_MAX_LENGTH = 70;
@@ -451,11 +452,51 @@ export default function ChatConversationScreen() {
   
   return (
     <Container isDark={isDark} testID="chat-conversation-screen">
+      {/* Debug Floating Button */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          bottom: 100,
+          right: 20,
+          backgroundColor: 'red',
+          padding: 15,
+          borderRadius: 30,
+          zIndex: 9999,
+          elevation: 5,
+        }}
+        onPress={() => {
+          // Test images for debugging
+          const testImages = [
+            {
+              id: 'test1',
+              uri: 'https://picsum.photos/500/500',
+              caption: 'Test Image 1'
+            },
+            {
+              id: 'test2',
+              uri: 'https://picsum.photos/600/600',
+              caption: 'Test Image 2'
+            }
+          ];
+          
+          // Navigate to ImageViewer with test data
+          console.log('Navigating to ImageViewer with test data');
+          navigation.navigate('ImageViewer', {
+            images: testImages,
+            initialIndex: 0
+          });
+        }}
+        testID="debug-image-viewer"
+      >
+        <Text style={{ color: 'white', fontWeight: 'bold' }}>Test Image Viewer</Text>
+      </TouchableOpacity>
+      
       <HeaderContainer style={{ marginTop: Platform.OS === 'ios' ? 10 : 0 }}>
         <BackButton 
           onPress={() => navigation.goBack()}
           accessibilityLabel="Go back"
           accessibilityRole="button"
+          testID="back-button"
         >
           <BackButtonText isDark={isDark}>←</BackButtonText>
         </BackButton>
@@ -470,11 +511,9 @@ export default function ChatConversationScreen() {
         {isTestChatScreen && isTestUser() ? (
           <CleanupButton 
             onPress={handleCleanupTestChat}
-            testID="cleanup-test-chat-button"
-            accessibilityLabel="Clean up test chat"
-            accessibilityRole="button"
+            testID="cleanup-test-chat"
           >
-            <CleanupButtonText>Clean</CleanupButtonText>
+            <CleanupButtonText>Reset Chat</CleanupButtonText>
           </CleanupButton>
         ) : (
           <PlanDateButton
@@ -553,67 +592,15 @@ export default function ChatConversationScreen() {
                               </ReplyContextContainer>
                             )}
                             {item.mediaType === 'image' && item.mediaUrl ? (
-                              <TouchableOpacity 
-                                onPress={() => {
-                                  try {
-                                    console.log('Image pressed, preparing to open fullscreen viewer');
-                                    
-                                    // Create an array of image items from all images in the current chat
-                                    const chatImages = messages
-                                      .filter(msg => msg.mediaType === 'image' && msg.mediaUrl)
-                                      .map(msg => ({
-                                        id: msg.id,
-                                        uri: msg.mediaUrl!,
-                                        caption: msg.caption,
-                                        width: msg.dimensions?.width,
-                                        height: msg.dimensions?.height
-                                      }));
-                                    
-                                    console.log(`Found ${chatImages.length} images in conversation`);
-                                    
-                                    // Find the index of the current image in the array
-                                    const currentImageIndex = chatImages.findIndex(img => img.id === item.id);
-                                    console.log(`Current image index: ${currentImageIndex}`);
-                                    
-                                    // Show debug alert to confirm data before navigation
-                                    Alert.alert(
-                                      'Debug', 
-                                      `Preparing to navigate to ImageViewer\nFound ${chatImages.length} images\nCurrent index: ${currentImageIndex}`, 
-                                      [
-                                        { 
-                                          text: 'Cancel', 
-                                          style: 'cancel'
-                                        },
-                                        {
-                                          text: 'Open Viewer',
-                                          onPress: () => {
-                                            // Navigate to the fullscreen image viewer
-                                            console.log('Attempting to navigate to ImageViewer screen');
-                                            navigation.navigate('ImageViewer', {
-                                              images: chatImages,
-                                              initialIndex: currentImageIndex >= 0 ? currentImageIndex : 0
-                                            });
-                                            console.log('Navigation to ImageViewer called');
-                                          }
-                                        }
-                                      ]
-                                    );
-                                  } catch (error) {
-                                    console.error('Error opening image viewer:', error);
-                                    Alert.alert('Error', `Could not open image viewer: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                                  }
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel="View image fullscreen"
-                              >
-                                <StyledImage 
-                                  source={{ uri: item.mediaUrl }} 
-                                  isDark={isDark} 
-                                  isCurrentUser={isCurrentUser} 
-                                  contentFit="cover"
-                                />
-                                {item.caption && <CaptionText isDark={isDark} isCurrentUser={isCurrentUser}>{item.caption}</CaptionText>}
-                              </TouchableOpacity>
+                              /* Use our dedicated component for image thumbnails */
+                              <ImageMessageThumbnail
+                                id={item.id}
+                                uri={item.mediaUrl}
+                                caption={item.caption}
+                                dimensions={item.dimensions}
+                                isDark={isDark}
+                                isCurrentUser={isCurrentUser}
+                              />
                             ) : item.mediaType === 'video' && (item.mediaUrl || item.thumbnailUrl) ? (
                               <TouchableOpacity onPress={() => { setViewingMedia(item); setIsMediaViewerVisible(true); }}>
                                 <VideoPreviewContainer isDark={isDark} isCurrentUser={isCurrentUser}>
