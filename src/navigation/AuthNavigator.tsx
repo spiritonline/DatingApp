@@ -44,7 +44,7 @@ export function AuthNavigator({ initialRouteName = 'Welcome' }: AuthNavigatorPro
         component={ImageViewerScreen} 
         options={{ 
           animation: 'fade',
-          presentation: 'modal', // Changed from transparentModal to modal
+          presentation: 'fullScreenModal', // Use fullScreenModal for true fullscreen
           headerShown: false
         }}
       />

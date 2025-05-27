@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform, StatusBar, Dimensions, ActivityIndicator } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// SafeAreaView removed as it's no longer needed
 import { Image } from 'expo-image';
 import { useAppTheme } from '../utils/useAppTheme';
 import { AuthStackParamList, AuthNavigationProp } from '../navigation/types';
@@ -98,6 +98,13 @@ export default function ImageViewerScreen() {
   // Get the current image
   const currentImage = images[currentIndex] as ImageItem | undefined;
   
+  // Handle status bar visibility
+  useEffect(() => {
+    // Hide status bar when viewer is active, show it when inactive
+    StatusBar.setHidden(true, 'fade');
+    return () => StatusBar.setHidden(false, 'fade');
+  }, []);
+
   // Log current image details
   useEffect(() => {
     if (currentImage) {
@@ -108,9 +115,7 @@ export default function ImageViewerScreen() {
   }, [currentImage, currentIndex]);
   
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000' : '#111' }]}>
-      <StatusBar hidden />
-      
+    <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#000' }]}>
       <TouchableOpacity 
         style={styles.closeButton} 
         onPress={handleClose}
@@ -213,7 +218,7 @@ export default function ImageViewerScreen() {
           </Text>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
