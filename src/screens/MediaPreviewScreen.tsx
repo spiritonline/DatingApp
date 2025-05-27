@@ -174,9 +174,9 @@ export default function MediaPreviewScreen() {
       await sendMessage(chatId, messageData);
       console.log('Message sent successfully');
       
-      // Navigate back to chat
-      console.log('Navigating back to chat conversation');
-      navigation.navigate('ChatConversation', { chatId, partnerName: '' });
+      // Navigate back to the chat conversation screen by popping the preview screen
+      console.log('Navigating back to chat conversation by popping MediaPreviewScreen');
+      navigation.goBack();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.error('Error sending media message:', errorMessage);

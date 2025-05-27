@@ -397,6 +397,9 @@ export default function ChatConversationScreen() {
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedItems = result.assets;
+
+        // Dismiss the attachment menu before navigating
+        setAttachmentMenuVisible(false);
         
         // Prepare navigation params
         const mediaItems = selectedItems.map((item) => {
