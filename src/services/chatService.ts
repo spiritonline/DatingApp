@@ -254,15 +254,17 @@ export async function sendMessage(
     });
     
     // Update chat with last message info, including reply data if present
+    const lastMessageData = {
+      content: messageData.type === 'text' ? (messageData.content || '').trim() : (messageData.content || ''),
+      senderId: currentUserId,
+      timestamp: serverTimestamp(),
+      type: messageData.type || 'text',
+      ...(replyTo ? { replyTo } : {}),
+      ...((messageData.type === 'image' || messageData.type === 'video') ? { mediaType: messageData.type } : {})
+    };
+    
     await updateDoc(chatRef, {
-      lastMessage: {
-        content: messageData.type === 'text' ? (messageData.content || '').trim() : (messageData.content || ''),
-        senderId: currentUserId,
-        timestamp: serverTimestamp(),
-        type: messageData.type || 'text',
-        mediaType: (messageData.type === 'image' || messageData.type === 'video') ? messageData.type : undefined,
-        ...(replyTo ? { replyTo } : {}),
-      },
+      lastMessage: lastMessageData,
       updatedAt: serverTimestamp(),
     });
     
