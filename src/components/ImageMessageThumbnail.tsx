@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Pressable } from 'react-native-gesture-handler'; // Import Pressable from react-native-gesture-handler
 import { Image } from 'expo-image';
 import { Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -31,7 +32,6 @@ export default function ImageMessageThumbnail({
   // Function to open the image viewer with this image
   const openImageViewer = () => {
     console.log('ImageMessageThumbnail: Opening image viewer', { id, uri });
-    Alert.alert('Opening image viewer...');
     
     // Create a simple image object for the viewer
     const imageData = [{

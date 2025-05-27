@@ -379,7 +379,7 @@ export default function ChatConversationScreen() {
       
       // Configure picker options
       const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        mediaTypes: ['images', 'videos'], // Using string array with correct MediaType values
         allowsEditing: false,
         aspect: [4, 3],
         quality: 0.8,
@@ -452,45 +452,6 @@ export default function ChatConversationScreen() {
   
   return (
     <Container isDark={isDark} testID="chat-conversation-screen">
-      {/* Debug Floating Button */}
-      <TouchableOpacity
-        style={{
-          position: 'absolute',
-          bottom: 100,
-          right: 20,
-          backgroundColor: 'red',
-          padding: 15,
-          borderRadius: 30,
-          zIndex: 9999,
-          elevation: 5,
-        }}
-        onPress={() => {
-          // Test images for debugging
-          const testImages = [
-            {
-              id: 'test1',
-              uri: 'https://picsum.photos/500/500',
-              caption: 'Test Image 1'
-            },
-            {
-              id: 'test2',
-              uri: 'https://picsum.photos/600/600',
-              caption: 'Test Image 2'
-            }
-          ];
-          
-          // Navigate to ImageViewer with test data
-          console.log('Navigating to ImageViewer with test data');
-          navigation.navigate('ImageViewer', {
-            images: testImages,
-            initialIndex: 0
-          });
-        }}
-        testID="debug-image-viewer"
-      >
-        <Text style={{ color: 'white', fontWeight: 'bold' }}>Test Image Viewer</Text>
-      </TouchableOpacity>
-      
       <HeaderContainer style={{ marginTop: Platform.OS === 'ios' ? 10 : 0 }}>
         <BackButton 
           onPress={() => navigation.goBack()}

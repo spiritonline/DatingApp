@@ -69,7 +69,7 @@ export default function PhotoUploadScreen() {
   const handleAddPhoto = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'], // Updated from deprecated MediaTypeOptions.Images
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.7, // Reduced quality for iOS compatibility
