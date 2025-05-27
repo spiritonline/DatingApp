@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { 
-  FlatList, 
-  TouchableOpacity, 
-  Text, 
-  KeyboardAvoidingView, 
-  Platform, 
+import {
+  FlatList,
+  TouchableOpacity,
+  Text,
+  KeyboardAvoidingView,
+  Platform,
   ActivityIndicator,
   Alert,
   View,
@@ -14,20 +14,48 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Swipeable, TouchableOpacity as GestureTouchableOpacity } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeIn } from 'react-native-reanimated';
 import { auth } from '../services/firebase';
 import { AuthStackParamList, AuthNavigationProp } from '../navigation/types';
+
+// Define MediaItem interface locally since it's not exported from navigation/types
+export interface MediaItem {
+  uri: string;
+  type: 'image' | 'video';
+  width?: number;
+  height?: number;
+  duration?: number;
+  fileName?: string;
+};
+
+// Define GalleryMediaItem interface since it's no longer imported from chatService
+export interface GalleryMediaItem {
+  url: string;
+  uri: string; // Some code uses url, some uses uri
+  type: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+  fileName?: string;
+  thumbnailUrl?: string;
+  caption?: string;
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+};
 import * as ImagePicker from 'expo-image-picker';
 import styled from 'styled-components/native';
 import { ThemeProps as BaseThemeProps } from '../utils/styled-components';
 import { useAppTheme } from '../utils/useAppTheme';
-import { 
-  sendMessage as sendChatMessage, 
-  subscribeToMessages, 
-  markMessagesAsRead, 
+import {
+  sendMessage as sendChatMessage,
+  subscribeToMessages,
+  markMessagesAsRead,
   isTestUser,
   cleanupTestChat,
   toggleReactionOnMessage,
+  ChatMessage as ChatServiceMessageType, // Import the consolidated type and ChatMessage for type consistency
 } from '../services/chatService';
 import { Image } from 'expo-image'; // Using expo-image for better performance
 import { Video, ResizeMode } from 'expo-av';
@@ -42,34 +70,13 @@ type ChatConversationScreenRouteProp = RouteProp<AuthStackParamList, 'ChatConver
 // Media item type for navigation
 // Interface used for media items being passed to the MediaPreview screen
 // This is used in the navigation params for MediaPreview screen
-export interface MediaItem {
-  uri: string;
-  type: 'image' | 'video';
-  width?: number;
-  height?: number;
-  duration?: number;
-  fileName?: string;
-}
+// MediaItem interface is already defined above
 
-interface Message {
+interface Message extends Omit<ChatServiceMessageType, 'createdAt'> { // Inherit from chatService for consistency
   id: string;
   senderId: string;
-  content: string;
-  type: 'text' | 'image' | 'video' | 'audio';
-  createdAt: Date | { toDate: () => Date } | number;
-  isRead?: boolean;
-  replyTo?: {
-    id: string;
-    content: string;
-    senderId: string;
-  };
-  reactions?: Record<string, string[]>; // emoji: [userId1, userId2]
-  mediaUrl?: string;
-  thumbnailUrl?: string;
-  caption?: string;
-  mediaType?: 'image' | 'video';
-  dimensions?: { width: number; height: number };
-  duration?: number;
+  // Override createdAt to be more specific for UI if needed, or use the one from ChatServiceMessageType
+  createdAt: Date | { toDate: () => Date }; // More specific for UI rendering
 }
 
 export default function ChatConversationScreen() {
@@ -87,7 +94,7 @@ export default function ChatConversationScreen() {
   // Reaction state
   const [reactionModalVisible, setReactionModalVisible] = useState(false);
   const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Message | null>(null);
-  const [reactionModalPosition] = useState({ x: 0, y: 0 });
+  const [reactionModalPosition, setReactionModalPosition] = useState({ x: 0, y: 0 });
   const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
   // Media sending states
@@ -171,25 +178,16 @@ export default function ChatConversationScreen() {
     }
   }, [replyToMessage, replyPanelAnimHeight, replyPanelAnimOpacity]);
 
-
-
-  // Send a message
-  const sendMessage = async () => {
+  const sendMessageInternal = async () => { // Renamed to avoid conflict with imported sendMessage
     if (!inputMessage.trim() || !currentUser || !chatId) return;
-    
-    // Ensure currentUser.uid is available for senderId
     const senderId = currentUser.uid;
-
     try {
       setIsSending(true);
-      
-      // Correctly pass messageData object to sendChatMessage
       const messagePayload: Parameters<typeof sendChatMessage>[1] = {
         content: inputMessage.trim(),
         senderId,
         type: 'text',
       };
-
       if (replyToMessage) {
         messagePayload.replyTo = {
           id: replyToMessage.id,
@@ -198,7 +196,6 @@ export default function ChatConversationScreen() {
         };
       }
       const success = await sendChatMessage(chatId, messagePayload);
-      
       if (success) {
         setInputMessage('');
       } else {
@@ -209,14 +206,12 @@ export default function ChatConversationScreen() {
       Alert.alert('Error', 'An unexpected error occurred while sending your message.');
     } finally {
       setIsSending(false);
-      setReplyToMessage(null); // Clear reply context after sending
+      setReplyToMessage(null);
     }
   };
   
-  // Format timestamp
   const formatTime = (timestamp: Date | { toDate: () => Date } | number) => {
     if (!timestamp) return '';
-    
     let date: Date;
     if (typeof timestamp === 'object' && 'toDate' in timestamp) {
       date = timestamp.toDate();
@@ -225,26 +220,16 @@ export default function ChatConversationScreen() {
     } else {
       date = new Date(timestamp);
     }
-    
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
   
-  // Clean up test chat data
   const handleCleanupTestChat = async () => {
     if (!isTestChatScreen) return;
-    
     Alert.alert(
-      'Clean Test Chat', 
+      'Clean Test Chat',
       'Are you sure you want to delete all messages in this test chat?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
+      [{ text: 'Cancel', style: 'cancel' },
+       { text: 'Delete', style: 'destructive', onPress: async () => {
             try {
               const success = await cleanupTestChat();
               if (success) {
@@ -307,14 +292,30 @@ export default function ChatConversationScreen() {
 
   const handleLongPressMessage = (_message: Message) => {
     // Measure the position of the message container to position the reaction menu
-    // Position values are not currently used with the current UI implementation
-    
     if (selectedMessageForReaction !== null) {
       setReactionModalVisible(false);
       setSelectedMessageForReaction(null);
     } else {
-      setSelectedMessageForReaction(_message);
-      setReactionModalVisible(true);
+      const messageRef = messageRefs.current[_message.id];
+      if (messageRef) {
+        // Measure the position of the message
+        messageRef.measure((x, y, width, height, pageX, pageY) => {
+          // Calculate position for the reaction menu above the message
+          // We need to account for the message's position on screen
+          const displayWidth = width || 200; // Default width if measurement fails
+          
+          setReactionModalPosition({
+            x: pageX + displayWidth / 2, // Center horizontally relative to the message
+            y: Math.max(60, pageY - 50) // Ensure it doesn't go above safe area
+          });
+          setSelectedMessageForReaction(_message);
+          setReactionModalVisible(true);
+        });
+      } else {
+        // Fallback if ref is not available
+        setSelectedMessageForReaction(_message);
+        setReactionModalVisible(true);
+      }
     }
   };
 
@@ -357,38 +358,24 @@ export default function ChatConversationScreen() {
 
   const handlePickMedia = async (type: 'gallery' | 'camera') => {
     try {
-      // Request permissions
       const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
       const mediaLibraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
       if (type === 'camera' && cameraPermission.status !== 'granted') {
-        Alert.alert(
-          'Camera Permission Required', 
-          'Please grant camera permissions to take photos.'
-        );
+        Alert.alert('Camera Permission Required', 'Please grant camera permissions to take photos.');
         return;
       }
-      
       if (type === 'gallery' && mediaLibraryPermission.status !== 'granted') {
-        Alert.alert(
-          'Media Library Permission Required', 
-          'Please grant media library permissions to select photos.'
-        );
+        Alert.alert('Media Library Permission Required', 'Please grant media library permissions to select photos.');
         return;
       }
-      
-      // Configure picker options
       const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ['images', 'videos'], // Using string array with correct MediaType values
+        mediaTypes: ImagePicker.MediaTypeOptions.All, // Updated to use MediaTypeOptions.All
         allowsEditing: false,
         aspect: [4, 3],
         quality: 0.8,
-        allowsMultipleSelection: type === 'gallery'
+        allowsMultipleSelection: false // Disabled multi-photo selection
       };
-      
-      // Launch the appropriate picker
       let result: ImagePicker.ImagePickerResult;
-      
       if (type === 'gallery') {
         result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
       } else {
@@ -396,34 +383,31 @@ export default function ChatConversationScreen() {
       }
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedItems = result.assets;
+        const selectedItem = result.assets[0]; // Only use the first selected item
 
         // Dismiss the attachment menu before navigating
         setAttachmentMenuVisible(false);
         
         // Prepare navigation params
-        const mediaItems = selectedItems.map((item) => {
-          // Normalize type to only be 'image' or 'video' to match MediaItem interface
-          let normalizedType: 'image' | 'video';
-          if (item.type === 'video' || (item.uri?.match(/\.(mp4|mov)$/i))) {
-            normalizedType = 'video';
-          } else {
-            // Treat 'livePhoto', 'pairedVideo', and any other types as 'image'
-            normalizedType = 'image';
-          }
-          
-          return {
-            uri: item.uri,
-            type: normalizedType,
-            width: item.width || 0,
-            height: item.height || 0,
-            duration: item.duration !== null ? item.duration : undefined,
-          };
-        });
+        // Normalize type to only be 'image' or 'video' to match MediaItem interface
+        let normalizedType: 'image' | 'video';
+        if (selectedItem.type === 'video' || (selectedItem.uri?.match(/\.(mp4|mov)$/i))) {
+          normalizedType = 'video';
+        } else {
+          // Treat 'livePhoto', 'pairedVideo', and any other types as 'image'
+          normalizedType = 'image';
+        }
+        
+        const mediaItems = [{
+          uri: selectedItem.uri,
+          type: normalizedType,
+          width: selectedItem.width || 0,
+          height: selectedItem.height || 0,
+          duration: selectedItem.duration !== null ? selectedItem.duration : undefined,
+        }];
         
         // Add a small delay to ensure any pending operations complete before navigation
         await new Promise(resolve => setTimeout(resolve, 100));
-        
         navigation.navigate('MediaPreview', {
           mediaItems,
           chatId,
@@ -585,6 +569,44 @@ export default function ChatConversationScreen() {
                                 {item.content}
                               </MessageText>
                             )}
+                            {/* Gallery Rendering */}
+                            {item.type === 'gallery' && item.galleryItems && item.galleryItems.length > 0 && (
+                              <View>
+                                {item.galleryCaption && (
+                                  <CaptionText isDark={isDark} isCurrentUser={isCurrentUser} style={{ marginBottom: 8 }}>
+                                    {item.galleryCaption}
+                                  </CaptionText>
+                                )}
+                                <GalleryGridContainer>
+                                  {item.galleryItems.slice(0, 4).map((galleryItem: GalleryMediaItem, index: number) => (
+                                    <GalleryItemTouchable
+                                      key={index}
+                                      onPress={() => {
+                                        const imagesForViewer = item.galleryItems!.map((gi: GalleryMediaItem, idx: number) => ({
+                                          id: `${item.id}-gallery-${idx}`,
+                                          uri: gi.uri,
+                                          caption: gi.caption || item.galleryCaption || '',
+                                          width: gi.dimensions?.width || undefined,
+                                          height: gi.dimensions?.height || undefined,
+                                        }));
+                                        navigation.navigate('ImageViewer', {
+                                          images: imagesForViewer,
+                                          initialIndex: index,
+                                        });
+                                      }}
+                                    >
+                                      <GalleryThumbnailImage source={{ uri: galleryItem.thumbnailUrl || galleryItem.uri }} contentFit="cover" />
+                                      {galleryItem.type === 'video' && <VideoIconText>▶️</VideoIconText>}
+                                      {item.galleryItems!.length > 4 && index === 3 && (
+                                        <MoreItemsOverlay>
+                                          <MoreItemsText>+{item.galleryItems!.length - 4}</MoreItemsText>
+                                        </MoreItemsOverlay>
+                                      )}
+                                    </GalleryItemTouchable>
+                                  ))}
+                                </GalleryGridContainer>
+                              </View>
+                            )}
                             <MessageTime isDark={isDark} isCurrentUser={isCurrentUser}>
                               {formatTime(item.createdAt)}
                             </MessageTime>
@@ -663,7 +685,7 @@ export default function ChatConversationScreen() {
               testID="message-input"
             />
             <SendButton 
-            onPress={sendMessage}
+            onPress={sendMessageInternal} // Use renamed function
             disabled={!inputMessage.trim() || isSending}
             accessibilityLabel="Send message"
             accessibilityRole="button"
@@ -683,8 +705,8 @@ export default function ChatConversationScreen() {
       >
         <Pressable 
           style={{ 
-            flex: 1, 
-            backgroundColor: 'rgba(0,0,0,0.1)' 
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)' // Make background semi-transparent to dim the chat
           }} 
           onPress={() => setReactionModalVisible(false)}
         >
@@ -694,21 +716,27 @@ export default function ChatConversationScreen() {
               flexDirection: 'row',
               padding: 8,
               borderRadius: 20,
-              alignSelf: 'center',
               elevation: 5,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.25,
               shadowRadius: 3.84,
-              top: reactionModalPosition.y, 
-              backgroundColor: isDark ? '#333' : '#fff'
+              top: reactionModalPosition.y,
+              left: reactionModalPosition.x - 150, // Center the modal horizontally (300px/2)
+              backgroundColor: isDark ? '#333' : '#fff',
+              zIndex: 9999 // Ensure it's above other elements
             }}
           >
             {EMOJI_REACTIONS.map(emoji => (
               <TouchableOpacity 
                 key={emoji} 
                 onPress={() => handleSelectReaction(emoji)} 
-                style={{ padding: 8 }}
+                style={{ 
+                  padding: 8,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                  borderRadius: 20,
+                  marginHorizontal: 2
+                }}
               >
                 <Text style={{ fontSize: 24 }}>{emoji}</Text>
               </TouchableOpacity>
@@ -939,6 +967,50 @@ const CaptionText = styled.Text<MessageProps>`
   padding-top: 4px;
   color: ${(props: MessageProps) => 
     props.isCurrentUser ? 'rgba(255, 255, 255, 0.9)' : (props.isDark ? '#DDDDDD' : '#333333')};
+`;
+
+const GalleryGridContainer = styled.View`
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  max-width: 220px; /* Adjust as needed */
+`;
+
+const GalleryItemTouchable = styled.TouchableOpacity`
+  width: 100px; /* Adjust for 2x2 grid with spacing */
+  height: 100px; /* Adjust for 2x2 grid with spacing */
+  margin: 2.5px; /* Spacing between items */
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #e0e0e0; /* Placeholder background */
+  justify-content: center;
+  align-items: center;
+`;
+
+const GalleryThumbnailImage = styled(Image)`
+  width: 100%;
+  height: 100%;
+`;
+
+const VideoIconText = styled.Text`
+  position: absolute;
+  font-size: 24px;
+  opacity: 0.8;
+`;
+
+const MoreItemsOverlay = styled.View`
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.5);
+  justify-content: center;
+  align-items: center;
+`;
+
+const MoreItemsText = styled.Text`
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
 `;
 
 const MessageTime = styled.Text<MessageProps>`
