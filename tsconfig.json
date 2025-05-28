@@ -3,18 +3,36 @@
   "compilerOptions": {
     "strict": true,
     "baseUrl": ".",
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ],
     "paths": {
+      "@/*": ["./src/*"],
       "@firebase/auth": [
-        "./node_modules/@firebase/auth/dist/index.rn.d.ts"
+        "./src/__mocks__/@firebase/auth.ts"
+      ],
+      "@firebase/auth/*": ["./src/__mocks__/@firebase/auth.ts"],
+      "@firebase/app": ["./src/__mocks__/@firebase/app.ts"],
+      "@firebase/app/*": [
+        "./src/__mocks__/@firebase/app.ts"
       ],
       "*": [
         "*",
         "src/*"
       ]
-    }
+    },
+    "esModuleInterop": true,
+    "skipLibCheck": true
   },
   "include": [
     "**/*.ts",
     "**/*.tsx"
+  ],
+  "exclude": [
+    "**/__tests__/*",
+    "**/__mocks__/*",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }

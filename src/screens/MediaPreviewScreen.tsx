@@ -26,7 +26,7 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
 type MediaPreviewScreenRouteProp = RouteProp<AuthStackParamList, 'MediaPreview'>;
 
 // Media item type for navigation
-interface MediaItem {
+export interface MediaItem {
   uri: string;
   type: 'image' | 'video';
   width?: number;
@@ -187,99 +187,109 @@ export default function MediaPreviewScreen() {
     }
   };
   return (
-    <Container isDark={isDark}>
+    <Container isDark={isDark} testID="media-preview-container">
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }}>
         <Header>
-          <BackButton onPress={() => navigation.goBack()}>
+          <BackButton onPress={() => navigation.goBack()} testID="back-button">
             <BackButtonText isDark={isDark}>✕</BackButtonText>
           </BackButton>
-          <HeaderTitle isDark={isDark}>Preview</HeaderTitle>
-          <SendButton onPress={handleSend} disabled={isUploading}>
-            <SendButtonText isDark={isDark}>{isUploading ? 'Sending...' : 'Send'}</SendButtonText>
+          <HeaderTitle isDark={isDark} testID="preview-title">Preview</HeaderTitle>
+          <SendButton onPress={handleSend} disabled={isUploading} testID="send-button">
+            <SendButtonText isDark={isDark} testID="send-button-text">
+              {isUploading ? 'Sending...' : 'Send'}
+            </SendButtonText>
           </SendButton>
         </Header>
         
-        <PreviewContainer>
-          {isUploading ? (
-            <UploadingOverlay>
-              <ActivityIndicator size="large" color="#FF6B6B" />
-              <UploadText isDark={isDark}>Uploading media...</UploadText>
-              {uploadProgress > 0 && (
-                <UploadText isDark={isDark}>{Math.round(uploadProgress)}%</UploadText>
-              )}
-            </UploadingOverlay>
-          ) : null}
-          
-          {error ? (
-            <ErrorOverlay>
-              <ErrorText isDark={isDark}>{error}</ErrorText>
-              <TouchableOpacity onPress={() => setError(null)}>
-                <ErrorDismissText isDark={isDark}>Tap to dismiss</ErrorDismissText>
-              </TouchableOpacity>
-            </ErrorOverlay>
-          ) : null}
-          
+        {isUploading && (
+          <UploadingOverlay>
+            <ActivityIndicator size="large" color="#FF6B6B" />
+            <UploadText>Uploading... {Math.round(uploadProgress * 100)}%</UploadText>
+          </UploadingOverlay>
+        )}
+        
+        {error && (
+          <ErrorOverlay>
+            <ErrorText>{error}</ErrorText>
+            <TouchableOpacity onPress={() => setError(null)} testID="dismiss-error-button">
+              <ErrorDismissText>Dismiss</ErrorDismissText>
+            </TouchableOpacity>
+          </ErrorOverlay>
+        )}
+        
+        <MediaContainer>
           {isVideo ? (
             <StyledVideo
               source={{ uri: selectedItem.uri }}
-              resizeMode={ResizeMode.CONTAIN}
+              resizeMode="contain"
               useNativeControls
               isLooping
               shouldPlay
+              testID="video-preview"
             />
           ) : (
             <StyledImage
               source={{ uri: selectedItem.uri }}
               contentFit="contain"
+              testID="image-preview"
             />
           )}
-        </PreviewContainer>
+        </MediaContainer>
         
         {mediaItems.length > 1 && (
           <ThumbnailList
-            data={mediaItems}
             horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item: MediaItem, index: number) => `${item.uri}_${index}`}
-            renderItem={({ item, index }: { item: MediaItem, index: number }) => (
-              <ThumbnailButton 
+            data={mediaItems}
+            keyExtractor={(item: MediaItem, index: number) => `thumbnail-${index}`}
+            renderItem={({ item, index }: { item: MediaItem; index: number }) => (
+              <ThumbnailItem
+                isActive={index === selectedItemIndex}
                 onPress={() => setSelectedItemIndex(index)}
-                isSelected={index === selectedItemIndex}
+                testID={`thumbnail-${index}`}
               >
                 <ThumbnailImage
                   source={{ uri: item.uri }}
-                  contentFit="cover"
-                  isSelected={index === selectedItemIndex}
+                  resizeMode="cover"
                 />
                 {item.type === 'video' && (
                   <VideoIndicator>
-                    <VideoIndicatorText>▶</VideoIndicatorText>
+                    <VideoIcon>▶️</VideoIcon>
                   </VideoIndicator>
                 )}
-              </ThumbnailButton>
+              </ThumbnailItem>
             )}
+            contentContainerStyle={styles.thumbnailList}
+            showsHorizontalScrollIndicator={false}
           />
         )}
         
-        <CaptionInput
-          value={caption}
-          onChangeText={setCaption}
-          placeholder="Add a caption..."
-          placeholderTextColor={isDark ? '#777777' : '#999999'}
-          multiline
-          maxLength={300}
-          isDark={isDark}
-        />
+        <CaptionContainer>
+          <CaptionInput
+            placeholder="Add a caption..."
+            placeholderTextColor={isDark ? '#888' : '#999'}
+            value={caption}
+            onChangeText={setCaption}
+            multiline
+            maxLength={500}
+            isDark={isDark}
+            testID="caption-input"
+          />
+          <CharCount isDark={isDark}>{caption.length}/500</CharCount>
+        </CaptionContainer>
       </SafeAreaView>
     </Container>
   );
 }
 
 // Styled components
-const Container = styled.View<{ isDark: boolean }>`
+interface ContainerProps {
+  isDark: boolean;
+}
+
+const Container = styled.View<ContainerProps>`
   flex: 1;
-  background-color: ${(props: { isDark: boolean }) => props.isDark ? '#121212' : '#FFFFFF'};
+  background-color: ${(props: ContainerProps) => props.isDark ? '#121212' : '#FFFFFF'};
 `;
 
 const Header = styled.View`
@@ -291,68 +301,92 @@ const Header = styled.View`
   border-bottom-color: #EEEEEE;
 `;
 
-const HeaderTitle = styled.Text<{ isDark: boolean }>`
+const HeaderTitle = styled.Text<ContainerProps>`
   font-size: 18px;
-  font-weight: bold;
-  color: ${(props: { isDark: boolean }) => props.isDark ? '#FFFFFF' : '#000000'};
+  font-weight: 600;
+  color: ${(props: ContainerProps) => props.isDark ? '#FFFFFF' : '#000000'};
 `;
 
-const BackButton = styled.TouchableOpacity`
+const BackButton = styled.TouchableOpacity.attrs({
+  testID: 'back-button',
+})`
   padding: 8px;
 `;
 
-const BackButtonText = styled.Text<{ isDark: boolean }>`
+const BackButtonText = styled.Text<ContainerProps>`
   font-size: 24px;
-  color: ${(props: { isDark: boolean }) => props.isDark ? '#FFFFFF' : '#000000'};
+  color: ${(props: ContainerProps) => props.isDark ? '#FFFFFF' : '#000000'};
 `;
 
-const SendButton = styled.TouchableOpacity`
+const SendButton = styled.TouchableOpacity.attrs({
+  testID: 'send-button',
+})`
   padding: 8px 16px;
-  border-radius: 16px;
   background-color: #FF6B6B;
+  border-radius: 20px;
   opacity: ${(props: { disabled?: boolean }) => props.disabled ? 0.5 : 1};
 `;
 
-const SendButtonText = styled.Text<{ isDark: boolean }>`
+const SendButtonText = styled.Text.attrs({
+  testID: 'send-button-text',
+})<ContainerProps>`
   color: #FFFFFF;
-  font-weight: bold;
+  font-weight: 600;
 `;
 
-const PreviewContainer = styled.View`
+const MediaContainer = styled.View`
   flex: 1;
+  background-color: #000000;
   justify-content: center;
   align-items: center;
 `;
 
-const StyledImage = styled(Image)`
+const StyledImage = styled(Image).attrs({
+  testID: 'image-preview',
+})`
   width: 100%;
   height: 100%;
 `;
 
-const StyledVideo = styled(Video)`
+const StyledVideo = styled(Video).attrs({
+  testID: 'video-preview',
+})`
   width: 100%;
   height: 100%;
 `;
 
-const ThumbnailList = styled(FlatList)`
+const styles = StyleSheet.create({
+  thumbnailList: {
+    paddingHorizontal: 8,
+  },
+  // Add any additional styles here
+});
+
+// Add proper type for FlatList with MediaItem
+type MediaItemFlatList = FlatList<MediaItem>;
+
+const ThumbnailList = styled(FlatList as new (props: any) => MediaItemFlatList)`
   height: 80px;
-  padding: 8px;
+  padding: 8px 0;
 `;
 
-const ThumbnailButton = styled.TouchableOpacity<{ isSelected: boolean }>`
+interface ThumbnailItemProps {
+  isActive: boolean;
+}
+
+const ThumbnailItem = styled.TouchableOpacity<ThumbnailItemProps>`
   width: 60px;
   height: 60px;
-  margin-horizontal: 4px;
+  margin-right: 8px;
   border-radius: 4px;
-  border-width: 2px;
-  border-color: ${(props: { isSelected: boolean }) => props.isSelected ? '#FF6B6B' : 'transparent'};
+  border-width: ${(props: ThumbnailItemProps) => props.isActive ? '2px' : '0'};
+  border-color: #FF6B6B;
   overflow: hidden;
 `;
 
-const ThumbnailImage = styled(Image)<{ isSelected: boolean }>`
+const ThumbnailImage = styled(Image)`
   width: 100%;
   height: 100%;
-  opacity: ${(props: { isSelected: boolean }) => props.isSelected ? 1 : 0.7};
 `;
 
 const VideoIndicator = styled.View`
@@ -366,19 +400,32 @@ const VideoIndicator = styled.View`
   background-color: rgba(0, 0, 0, 0.3);
 `;
 
-const VideoIndicatorText = styled.Text`
+const VideoIcon = styled.Text`
   color: white;
   font-size: 20px;
+` as any;
+
+const CaptionInput = styled.TextInput.attrs<ContainerProps>({
+  testID: 'caption-input',
+})<ContainerProps>`
+  flex: 1;
+  color: ${(props: ContainerProps) => (props.isDark ? '#FFFFFF' : '#000000')};
+  font-size: 16px;
+  padding: 12px;
+  max-height: 100px;
 `;
 
-const CaptionInput = styled.TextInput<{ isDark: boolean }>`
+const CaptionContainer = styled.View`
   margin: 16px;
   padding: 12px;
   border-radius: 8px;
   background-color: ${(props: { isDark: boolean }) => props.isDark ? '#2C2C2C' : '#F0F0F0'};
+`;
+
+const CharCount = styled.Text<{ isDark: boolean }>`
   color: ${(props: { isDark: boolean }) => props.isDark ? '#FFFFFF' : '#000000'};
-  min-height: 80px;
-  max-height: 120px;
+  font-size: 12px;
+  text-align: right;
 `;
 
 const UploadingOverlay = styled.View`
@@ -401,13 +448,12 @@ const UploadText = styled.Text<{ isDark: boolean }>`
 
 const ErrorOverlay = styled.View`
   position: absolute;
-  top: 70px;
+  bottom: 20px;
   left: 20px;
   right: 20px;
-  padding: 16px;
   background-color: rgba(255, 0, 0, 0.8);
+  padding: 12px;
   border-radius: 8px;
-  z-index: 10;
   align-items: center;
 `;
 
@@ -421,7 +467,6 @@ const ErrorText = styled.Text<{ isDark: boolean }>`
 const ErrorDismissText = styled.Text<{ isDark: boolean }>`
   color: white;
   font-size: 12px;
-  font-weight: bold;
-  margin-top: 8px;
   text-decoration: underline;
+  margin-top: 8px;
 `;

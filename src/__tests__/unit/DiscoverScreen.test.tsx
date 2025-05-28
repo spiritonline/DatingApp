@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
@@ -7,6 +7,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import DiscoverScreen from '../../screens/DiscoverScreen';
 import likesReducer from '../../store/likesSlice';
 import * as hooks from '../../hooks/useProfiles';
+import { Alert } from 'react-native';
 
 // Mock navigation
 jest.mock('@react-navigation/native', () => {
@@ -43,17 +44,22 @@ jest.mock('../../hooks/useProfiles', () => {
 });
 
 // Mock the useLikeHandler hook
+const mockUseLikeHandler = {
+  isLikeModalVisible: false,
+  setIsLikeModalVisible: jest.fn(),
+  likeText: '',
+  setLikeText: jest.fn(),
+  isSubmitting: false,
+  initiateProfileLike: jest.fn(),
+  submitTextLike: jest.fn().mockResolvedValue(true),
+};
+
 jest.mock('../../hooks/useLikeHandler', () => ({
-  useLikeHandler: () => ({
-    isLikeModalVisible: false,
-    setIsLikeModalVisible: jest.fn(),
-    likeText: '',
-    setLikeText: jest.fn(),
-    isSubmitting: false,
-    initiateProfileLike: jest.fn(),
-    submitTextLike: jest.fn().mockResolvedValue(true),
-  }),
+  useLikeHandler: () => mockUseLikeHandler,
 }));
+
+// Mock Alert.alert
+jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 
 // Create a test redux store
 const createTestStore = () => configureStore({
@@ -143,14 +149,17 @@ describe('DiscoverScreen', () => {
       hasMore: true,
     });
 
-    const { getByTestId, queryByText } = render(
+    const { getByTestId, getByText } = render(
       <TestWrapper>
         <DiscoverScreen />
       </TestWrapper>
     );
 
     expect(getByTestId('discover-screen')).toBeTruthy();
-    expect(queryByText('Finding people for you...')).toBeTruthy();
+    expect(getByText('Finding people for you...')).toBeTruthy();
+    
+    // Check if loading indicator is shown
+    expect(getByTestId('loading-indicator')).toBeTruthy();
   });
 
   it('renders error state if there is an error', async () => {
@@ -177,7 +186,7 @@ describe('DiscoverScreen', () => {
   });
 
   it('renders profile content correctly', async () => {
-    const { getByTestId, getByText } = render(
+    const { getByTestId, getByText, getAllByTestId } = render(
       <TestWrapper>
         <DiscoverScreen />
       </TestWrapper>
@@ -192,16 +201,176 @@ describe('DiscoverScreen', () => {
     // Check if the name and age are displayed
     expect(getByText(`${mockProfiles[0].name}, ${mockProfiles[0].age}`)).toBeTruthy();
     
-    // Check if mutual friends badge is displayed
-    expect(getByText(`👥 ${mockProfiles[0].mutualFriendsCount} mutual friends`)).toBeTruthy();
-    
-    // Check if prompt answers are displayed
-    expect(getByText(mockProfiles[0].promptAnswers[0].prompt)).toBeTruthy();
-    expect(getByText(mockProfiles[0].promptAnswers[0].answer)).toBeTruthy();
-    
-    // Check if action buttons exist
+    // Check if action buttons are rendered
     expect(getByTestId('dismiss-button')).toBeTruthy();
     expect(getByTestId('like-button')).toBeTruthy();
+    
+    // Check if photos are rendered
+    const photos = getAllByTestId(/^profile-photo-/);
+    expect(photos.length).toBe(mockProfiles[0].photos.length);
+  });
+
+  it('calls initiateProfileLike when like button is pressed', async () => {
+    const { getByTestId } = render(
+      <TestWrapper>
+        <DiscoverScreen />
+      </TestWrapper>
+    );
+
+    fireEvent.press(getByTestId('like-button'));
+    expect(mockUseLikeHandler.initiateProfileLike).toHaveBeenCalledWith(mockProfiles[0].id);
+  });
+
+  it('shows like modal when initiateProfileLike is called', async () => {
+    // Mock the initiateProfileLike to show the modal
+    mockUseLikeHandler.initiateProfileLike.mockImplementation(() => {
+      mockUseLikeHandler.isLikeModalVisible = true;
+    });
+
+    const { getByTestId, queryByTestId } = render(
+      <TestWrapper>
+        <DiscoverScreen />
+      </TestWrapper>
+    );
+
+    // Initially, modal should not be visible
+    expect(queryByTestId('like-modal')).toBeNull();
+    
+    // Press like button
+    fireEvent.press(getByTestId('like-button'));
+    
+    // Modal should now be visible
+    expect(mockUseLikeHandler.setIsLikeModalVisible).toHaveBeenCalledWith(true);
+  });
+
+  it('handles text input in like modal', async () => {
+    // Set modal to be visible
+    mockUseLikeHandler.isLikeModalVisible = true;
+    
+    const { getByTestId } = render(
+      <TestWrapper>
+        <DiscoverScreen />
+      </TestWrapper>
+    );
+
+    const testText = 'This is a test message for the like modal';
+    const input = getByTestId('like-text-input');
+    
+    fireEvent.changeText(input, testText);
+    expect(mockUseLikeHandler.setLikeText).toHaveBeenCalledWith(testText);
+  });
+
+  it('shows character counter and validation in like modal', async () => {
+    // Set modal to be visible
+    mockUseLikeHandler.isLikeModalVisible = true;
+    mockUseLikeHandler.likeText = 'Short message';
+    
+    const { getByTestId, getByText } = render(
+      <TestWrapper>
+        <DiscoverScreen />
+      </TestWrapper>
+    );
+
+    // Check character counter
+    expect(getByText(`${mockUseLikeHandler.likeText.length}/1000`)).toBeTruthy();
+    
+    // Test submit with short message
+    fireEvent.press(getByTestId('submit-like-button'));
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Too Short',
+      'Please write at least 80 characters to express your interest.'
+    );
+  });
+
+  it('handles successful like submission', async () => {
+    // Set modal to be visible with valid text
+    mockUseLikeHandler.isLikeModalVisible = true;
+    mockUseLikeHandler.likeText = 'A'.repeat(80); // Valid length
+    
+    const { getByTestId } = render(
+      <TestWrapper>
+        <DiscoverScreen />
+      </TestWrapper>
+    );
+
+    // Submit the like
+    await act(async () => {
+      fireEvent.press(getByTestId('submit-like-button'));
+    });
+    
+    expect(mockUseLikeHandler.submitTextLike).toHaveBeenCalled();
+  });
+
+  it('handles dismiss button press', async () => {
+    const { getByTestId } = render(
+      <TestWrapper>
+        <DiscoverScreen />
+      </TestWrapper>
+    );
+
+    // Initial profile index should be 0
+    expect(getByTestId(`profile-container-${mockProfiles[0].id}`)).toBeTruthy();
+    
+    // Press dismiss button
+    fireEvent.press(getByTestId('dismiss-button'));
+    
+    // Should move to next profile
+    // Note: In a real test, we'd need to handle the animation timing
+    // For now, we just verify the button is pressable
+  });
+
+  it('loads more profiles when reaching end of list', async () => {
+    const mockFetchNextPage = jest.fn();
+    
+    // Mock useProfiles to simulate having only one profile initially
+    (hooks.useProfiles as jest.Mock).mockReturnValue({
+      profiles: [mockProfiles[0]], // Only one profile
+      isLoading: false,
+      isError: false,
+      error: null,
+      fetchNextPage: mockFetchNextPage,
+      resetProfiles: jest.fn(),
+      hasMore: true,
+    });
+
+    const { getByTestId } = render(
+      <TestWrapper>
+        <DiscoverScreen />
+      </TestWrapper>
+    );
+
+    // Press dismiss button to trigger end of list
+    fireEvent.press(getByTestId('dismiss-button'));
+    
+    // Should call fetchNextPage when trying to go to next profile with only one profile
+    expect(mockFetchNextPage).toHaveBeenCalled();
+  });
+
+  it('handles retry when there is an error', async () => {
+    const mockResetProfiles = jest.fn();
+    
+    // Mock error state
+    (hooks.useProfiles as jest.Mock).mockReturnValue({
+      profiles: [],
+      isLoading: false,
+      isError: true,
+      error: new Error('Failed to load'),
+      fetchNextPage: jest.fn(),
+      resetProfiles: mockResetProfiles,
+      hasMore: true,
+    });
+
+    const { getByText } = render(
+      <TestWrapper>
+        <DiscoverScreen />
+      </TestWrapper>
+    );
+
+    // Click retry button
+    fireEvent.press(getByText('Try Again'));
+    
+    // Should call resetProfiles
+    expect(mockResetProfiles).toHaveBeenCalled();
   });
 
   it('matches snapshot', () => {

@@ -1,113 +1,186 @@
-import { validatePersonalInfo } from '../../screens/profile-setup/utils/validation';
+import React from 'react';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { auth } from 'services/firebase';
+import { updateUserProfile } from 'services/profileService';
+import PersonalInfoScreen from 'screens/profile-setup/PersonalInfoScreen';
+import { validatePersonalInfo } from 'screens/profile-setup/utils/validation';
 
-// Mock the validation module
-jest.mock('../../screens/profile-setup/utils/validation', () => ({
+// Mock the required modules
+jest.mock('services/firebase', () => ({
+  auth: {
+    currentUser: {
+      uid: 'test-uid'
+    }
+  }
+}));
+
+jest.mock('services/profileService', () => ({
+  updateUserProfile: jest.fn().mockResolvedValue({})
+}));
+
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({
+    navigate: jest.fn()
+  })
+}));
+
+jest.mock('screens/profile-setup/utils/validation', () => ({
   validatePersonalInfo: jest.fn()
 }));
 
-describe('PersonalInfoScreen Validation', () => {
+describe('PersonalInfoScreen', () => {
   beforeEach(() => {
-    // Reset all mocks before each test
     jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert');
   });
 
-  describe('validatePersonalInfo', () => {
-    it('should return errors for empty form', () => {
-      const emptyForm = {
-        name: '',
-        age: '',
-        gender: '',
-        locationConsent: false
-      };
+  const renderComponent = () => {
+    return render(<PersonalInfoScreen />);
+  };
 
-      // Mock the validation function to return errors for empty form
-      (validatePersonalInfo as jest.Mock).mockReturnValue({
-        isValid: false,
-        errors: {
-          name: 'Name is required',
-          age: 'Age is required',
-          gender: 'Gender is required',
-          locationConsent: 'Location consent is required'
-        }
-      });
+  it('renders the personal info form', () => {
+    const { getByPlaceholderText, getByText } = renderComponent();
+    
+    expect(getByPlaceholderText('Full Name')).toBeTruthy();
+    expect(getByPlaceholderText('Age')).toBeTruthy();
+    expect(getByText('Gender')).toBeTruthy();
+    expect(getByText(/I agree to share my location/)).toBeTruthy();
+    expect(getByText('Next')).toBeTruthy();
+  });
 
-      const result = validatePersonalInfo(emptyForm);
-      
-      expect(validatePersonalInfo).toHaveBeenCalledWith(emptyForm);
-      expect(result.isValid).toBe(false);
-      expect(result.errors.name).toBe('Name is required');
-      expect(result.errors.age).toBe('Age is required');
-      expect(result.errors.gender).toBe('Gender is required');
-      expect(result.errors.locationConsent).toBe('Location consent is required');
+  it('shows validation errors when form is empty', async () => {
+    (validatePersonalInfo as jest.Mock).mockReturnValue({
+      isValid: false,
+      errors: {
+        name: 'Name is required',
+        age: 'Age is required',
+        gender: 'Gender is required',
+        locationConsent: 'Location consent is required'
+      }
     });
 
-    it('should validate age boundaries', () => {
-      const underAgeForm = {
-        name: 'John',
-        age: '17',
-        gender: 'male',
-        locationConsent: true
-      };
-
-      // Mock validation for underage
-      (validatePersonalInfo as jest.Mock).mockReturnValueOnce({
-        isValid: false,
-        errors: {
-          age: 'You must be at least 18 years old',
-          name: '',
-          gender: '',
-          locationConsent: ''
-        }
-      });
-
-      let result = validatePersonalInfo(underAgeForm);
-      expect(validatePersonalInfo).toHaveBeenCalledWith(underAgeForm);
-      expect(result.isValid).toBe(false);
-      expect(result.errors.age).toBe('You must be at least 18 years old');
-
-      // Test over maximum age
-      const overAgeForm = { ...underAgeForm, age: '100' };
-      
-      (validatePersonalInfo as jest.Mock).mockReturnValueOnce({
-        isValid: false,
-        errors: {
-          age: 'Age must be 99 or less',
-          name: '',
-          gender: '',
-          locationConsent: ''
-        }
-      });
-
-      result = validatePersonalInfo(overAgeForm);
-      expect(result.isValid).toBe(false);
-      expect(result.errors.age).toBe('Age must be 99 or less');
+    const { getByText, getByTestId } = renderComponent();
+    
+    await act(async () => {
+      fireEvent.press(getByText('Next'));
     });
 
-    it('should validate a valid form', () => {
-      const validForm = {
-        name: 'John Doe',
-        age: '25',
-        gender: 'male',
-        locationConsent: true
-      };
+    expect(validatePersonalInfo).toHaveBeenCalled();
+    expect(getByText('Name is required')).toBeTruthy();
+    expect(getByText('Age is required')).toBeTruthy();
+    expect(getByText('Gender is required')).toBeTruthy();
+    expect(getByText('Location consent is required')).toBeTruthy();
+    expect(updateUserProfile).not.toHaveBeenCalled();
+  });
 
-      (validatePersonalInfo as jest.Mock).mockReturnValue({
-        isValid: true,
-        errors: {
-          name: '',
-          age: '',
-          gender: '',
-          locationConsent: ''
-        }
-      });
+  it('handles form input changes', async () => {
+    const { getByPlaceholderText, getByText, getByTestId } = renderComponent();
+    
+    // Test name input
+    const nameInput = getByPlaceholderText('Full Name');
+    fireEvent.changeText(nameInput, 'John Doe');
+    expect(nameInput.props.value).toBe('John Doe');
+    
+    // Test age input
+    const ageInput = getByPlaceholderText('Age');
+    fireEvent.changeText(ageInput, '25');
+    expect(ageInput.props.value).toBe('25');
+    
+    // Test gender selection
+    const maleButton = getByText('Male');
+    fireEvent.press(maleButton);
+    
+    // Test location consent
+    const consentCheckbox = getByTestId('location-consent-checkbox');
+    fireEvent.press(consentCheckbox);
+  });
 
-      const result = validatePersonalInfo(validForm);
-      expect(validatePersonalInfo).toHaveBeenCalledWith(validForm);
-      expect(result.isValid).toBe(true);
-      expect(result.errors.name).toBe('');
-      expect(result.errors.age).toBe('');
-      expect(result.errors.gender).toBe('');
-      expect(result.errors.locationConsent).toBe('');
+  it('submits the form successfully', async () => {
+    const mockNavigate = jest.fn();
+    require('@react-navigation/native').useNavigation.mockReturnValue({ navigate: mockNavigate });
+    
+    (validatePersonalInfo as jest.Mock).mockReturnValue({
+      isValid: true,
+      errors: {}
     });
+
+    const { getByPlaceholderText, getByText, getByTestId } = renderComponent();
+    
+    // Fill out the form
+    fireEvent.changeText(getByPlaceholderText('Full Name'), 'John Doe');
+    fireEvent.changeText(getByPlaceholderText('Age'), '25');
+    fireEvent.press(getByText('Male'));
+    fireEvent.press(getByTestId('location-consent-checkbox'));
+    
+    await act(async () => {
+      fireEvent.press(getByText('Next'));
+    });
+
+    expect(validatePersonalInfo).toHaveBeenCalledWith({
+      name: 'John Doe',
+      age: '25',
+      gender: 'male',
+      locationConsent: true
+    });
+    
+    expect(updateUserProfile).toHaveBeenCalledWith('test-uid', {
+      displayName: 'John Doe',
+      birthdate: '25',
+      name: 'John Doe',
+      age: 25,
+      gender: 'male',
+      locationConsent: true,
+      profileComplete: true
+    });
+    
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('PhotoUpload');
+    });
+  });
+
+  it('handles submission error', async () => {
+    const errorMessage = 'Failed to save profile';
+    (updateUserProfile as jest.Mock).mockRejectedValueOnce(new Error(errorMessage));
+    
+    (validatePersonalInfo as jest.Mock).mockReturnValue({
+      isValid: true,
+      errors: {}
+    });
+
+    const { getByPlaceholderText, getByText, getByTestId } = renderComponent();
+    
+    // Fill out the form
+    fireEvent.changeText(getByPlaceholderText('Full Name'), 'John Doe');
+    fireEvent.changeText(getByPlaceholderText('Age'), '25');
+    fireEvent.press(getByText('Male'));
+    fireEvent.press(getByTestId('location-consent-checkbox'));
+    
+    await act(async () => {
+      fireEvent.press(getByText('Next'));
+    });
+
+    await waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith('Error', errorMessage);
+    });
+  });
+
+  it('shows error when user is not authenticated', async () => {
+    // Mock auth.currentUser being null
+    jest.spyOn(auth, 'currentUser', 'get').mockReturnValueOnce(null);
+    
+    (validatePersonalInfo as jest.Mock).mockReturnValue({
+      isValid: true,
+      errors: {}
+    });
+
+    const { getByText } = renderComponent();
+    
+    await act(async () => {
+      fireEvent.press(getByText('Next'));
+    });
+
+    expect(Alert.alert).toHaveBeenCalledWith('Error', 'You must be logged in to continue');
+    expect(updateUserProfile).not.toHaveBeenCalled();
   });
 });

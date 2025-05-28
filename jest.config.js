@@ -24,5 +24,8 @@ module.exports = {
   moduleNameMapper: {
     '^@firebase/auth$': '<rootDir>/src/__mocks__/@firebase/auth.ts',
     '^@firebase/auth/(.*)$': '<rootDir>/src/__mocks__/@firebase/auth.ts',
+    '^@/services/chatService$': '<rootDir>/src/__mocks__/services/chatService.ts',
+    '^@/services/firebase$': '<rootDir>/src/__mocks__/services/firebase.ts',
+    '^@/(.*)$': '<rootDir>/src/$1',
   },
 };
