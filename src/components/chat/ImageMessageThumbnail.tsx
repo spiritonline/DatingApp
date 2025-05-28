@@ -1,26 +1,21 @@
+// src/components/chat/ImageMessageThumbnail.tsx
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Pressable } from 'react-native-gesture-handler'; // Import Pressable from react-native-gesture-handler
+import { View, StyleSheet, Text } from 'react-native';
+import { Pressable } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
-import { Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { AuthNavigationProp } from '../navigation/types';
+import { AuthNavigationProp } from '../../navigation/types';
 
 interface ImageMessageThumbnailProps {
-  id: string;
   uri: string;
   caption?: string;
   dimensions?: { width?: number; height?: number };
   isDark: boolean;
   isCurrentUser: boolean;
+  // id?: string; // Optional: If needed for specific viewer context, but often URI is enough
 }
 
-/**
- * A dedicated component for rendering image thumbnails in chat messages
- * with reliable click handling for opening the image viewer.
- */
 export default function ImageMessageThumbnail({
-  id,
   uri,
   caption,
   dimensions,
@@ -29,20 +24,14 @@ export default function ImageMessageThumbnail({
 }: ImageMessageThumbnailProps) {
   const navigation = useNavigation<AuthNavigationProp>();
 
-  // Function to open the image viewer with this image
   const openImageViewer = () => {
-    console.log('ImageMessageThumbnail: Opening image viewer', { id, uri });
-    
-    // Create a simple image object for the viewer
     const imageData = [{
-      id,
+      id: uri, // Use URI as a simple ID for the viewer
       uri,
       caption,
       width: dimensions?.width,
       height: dimensions?.height,
     }];
-    
-    // Navigate to the image viewer
     navigation.navigate('ImageViewer', {
       images: imageData,
       initialIndex: 0,
@@ -51,7 +40,6 @@ export default function ImageMessageThumbnail({
 
   return (
     <View style={styles.container} testID="image-message-thumbnail">
-      {/* Direct Pressable with minimal complexity */}
       <Pressable
         onPress={openImageViewer}
         style={({ pressed }) => [
@@ -77,7 +65,7 @@ export default function ImageMessageThumbnail({
           style={[
             styles.caption,
             {
-              color: isCurrentUser ? '#FFFFFF' : (isDark ? '#FFFFFF' : '#000000'),
+              color: isCurrentUser ? (isDark ? '#FFFFFF' : '#FFFFFF') : (isDark ? '#FFFFFF' : '#000000'),
             }
           ]}
         >

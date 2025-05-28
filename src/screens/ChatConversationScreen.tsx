@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FlatList,
   TouchableOpacity,
@@ -11,14 +11,12 @@ import {
   Modal,
   Pressable
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { Swipeable, TouchableOpacity as GestureTouchableOpacity } from 'react-native-gesture-handler';
+import { Swipeable } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { auth } from '../services/firebase';
 import { AuthStackParamList, AuthNavigationProp } from '../navigation/types';
 import * as ImagePicker from 'expo-image-picker';
-// Removed styled-components import from here
 import { useAppTheme } from '../utils/useAppTheme';
 import {
   sendMessage as sendChatMessage,
@@ -27,13 +25,15 @@ import {
   isTestUser,
   cleanupTestChat,
   toggleReactionOnMessage,
-  ChatMessage as ChatServiceMessageType,
+  SendMessagePayload,
+  ChatServiceMessage,
 } from '../services/chatService';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
-import ImageMessageThumbnail from '../components/ImageMessageThumbnail';
 
-// Import styled components from the new styles file
+import MessageItem from '../components/chat/MessageItem';
+import { UIMessage, GalleryMediaItem as UIGalleryMediaItem, MediaItemForPreview } from '../types/chat';
+
 import {
   Container,
   LoadingContainer,
@@ -51,28 +51,6 @@ import {
   MessagesContainer,
   EmptyContainer,
   EmptyText,
-  MessageContainer,
-  MessageBubble,
-  StyledImage,
-  VideoPreviewContainer,
-  PlayIconOverlay,
-  PlayIconText,
-  MessageText,
-  CaptionText,
-  GalleryGridContainer,
-  GalleryItemTouchable,
-  GalleryThumbnailImage,
-  VideoIconText,
-  MoreItemsOverlay,
-  MoreItemsText,
-  MessageTime,
-  ReplyContextContainer,
-  ReplyContextSender,
-  ReplyContextText,
-  ReactionsContainer,
-  ReactionPill,
-  ReactionEmoji,
-  ReactionCount,
   InputOuterContainer,
   InputContainer,
   AttachmentButton,
@@ -91,74 +69,47 @@ import {
 } from './ChatConversationScreen.styles';
 
 
-// Constants
 const REPLY_PREVIEW_MAX_LENGTH = 70;
 const REPLY_PANEL_HEIGHT = 60;
 
 type ChatConversationScreenRouteProp = RouteProp<AuthStackParamList, 'ChatConversation'>;
 
-export interface MediaItem {
-  uri: string;
-  type: 'image' | 'video';
-  width?: number;
-  height?: number;
-  duration?: number;
-  fileName?: string;
-};
-
-export interface GalleryMediaItem {
-  url: string;
-  uri: string; 
-  type: string;
-  width?: number;
-  height?: number;
-  duration?: number;
-  fileName?: string;
-  thumbnailUrl?: string;
-  caption?: string;
-  dimensions?: {
-    width: number;
-    height: number;
-  };
-};
-
-interface Message extends Omit<ChatServiceMessageType, 'createdAt'> { 
-  id: string;
-  senderId: string;
-  createdAt: Date | { toDate: () => Date }; 
-}
-
 export default function ChatConversationScreen() {
+  // --- START OF HOOKS ---
+  // All hooks MUST be called before any conditional returns.
+
   const { isDark } = useAppTheme();
   const navigation = useNavigation<AuthNavigationProp>();
   const route = useRoute<ChatConversationScreenRouteProp>();
-  const { chatId, partnerName } = route.params;
-  
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Destructure params after navigation/route hooks
+  const { chatId, partnerName } = route.params || { chatId: '', partnerName: 'Chat' }; // Provide defaults for safety
+
+  const [messages, setMessages] = useState<UIMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isTestChatScreen, setIsTestChatScreen] = useState(false);
 
   const [reactionModalVisible, setReactionModalVisible] = useState(false);
-  const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Message | null>(null);
+  const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<UIMessage | null>(null);
   const [reactionModalPosition, setReactionModalPosition] = useState({ x: 0, y: 0 });
-  const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-
+  
   const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
   const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
-  const [viewingMedia, setViewingMedia] = useState<Message | null>(null);
+  const [viewingMedia, setViewingMedia] = useState<UIMessage | null>(null);
 
-  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
+  const [replyToMessage, setReplyToMessage] = useState<UIMessage | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
   const messageRefs = useRef<Record<string, (View | null)>>({});
-  const currentUser = auth.currentUser;
+  const currentUser = auth.currentUser; // This is not a hook, safe here
 
   const replyPanelAnimHeight = useSharedValue(0);
   const replyPanelAnimOpacity = useSharedValue(0);
+  
+  const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']; // Constant, not a hook
 
   const animatedReplyPanelStyle = useAnimatedStyle(() => {
     return {
@@ -168,63 +119,75 @@ export default function ChatConversationScreen() {
     };
   });
 
+  // useEffects
   useEffect(() => {
-    if (!chatId || !currentUser) return;
-    
+    if (!chatId || !currentUser) {
+        setIsLoading(false); // Ensure loading state is cleared if prerequisites aren't met
+        return;
+    }
+
     const isTest = chatId.startsWith('testChat_');
     setIsTestChatScreen(isTest);
-    
-    void markMessagesAsRead(chatId).catch(error => {
+
+    markMessagesAsRead(chatId).catch(error => { // No 'void' needed, it's a promise
       console.error('Error marking messages as read:', error);
     });
-    
-    const unsubscribe = subscribeToMessages(chatId, (chatMessages) => {
-      const formattedMessages = chatMessages.map(msg => ({
-        ...msg
-      } as Message));
-      setMessages(formattedMessages);
+
+    const unsubscribe = subscribeToMessages(chatId, (serviceMessages: ChatServiceMessage[]) => {
+      const uiMessages: UIMessage[] = serviceMessages.map(msg => ({
+        ...msg,
+        createdAt: msg.createdAt.toDate(),
+      }));
+      setMessages(uiMessages);
       setIsLoading(false);
-      
-      if (chatMessages.length > 0 && flatListRef.current) {
+
+      if (uiMessages.length > 0 && flatListRef.current) {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 100);
       }
     });
-    
+
     return unsubscribe;
-  }, [chatId, currentUser]);
+  }, [chatId, currentUser]); // Added currentUser to dependencies
 
   useEffect(() => {
     if (replyToMessage) {
-      replyPanelAnimHeight.value = withTiming(REPLY_PANEL_HEIGHT, { 
-        duration: 100, 
-        easing: Easing.out(Easing.exp) 
+      replyPanelAnimHeight.value = withTiming(REPLY_PANEL_HEIGHT, {
+        duration: 100, easing: Easing.out(Easing.exp)
       });
-      replyPanelAnimOpacity.value = withTiming(1, { 
-        duration: 100,
-        easing: Easing.out(Easing.exp)
+      replyPanelAnimOpacity.value = withTiming(1, {
+        duration: 100, easing: Easing.out(Easing.exp)
       });
     } else {
-      replyPanelAnimHeight.value = withTiming(0, { 
-        duration: 100, 
-        easing: Easing.in(Easing.exp) 
+      replyPanelAnimHeight.value = withTiming(0, {
+        duration: 100, easing: Easing.in(Easing.exp)
       });
-      replyPanelAnimOpacity.value = withTiming(0, { 
-        duration: 100,
-        easing: Easing.in(Easing.exp)
+      replyPanelAnimOpacity.value = withTiming(0, {
+        duration: 100, easing: Easing.in(Easing.exp)
       });
     }
   }, [replyToMessage, replyPanelAnimHeight, replyPanelAnimOpacity]);
 
-  const sendMessageInternal = async () => { 
+  useEffect(() => {
+    let timerId: ReturnType<typeof setTimeout>;
+    if (highlightedMessageId) {
+      timerId = setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 1500);
+    }
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [highlightedMessageId]);
+
+  // useCallbacks
+  const sendMessageInternal = useCallback(async () => {
     if (!inputMessage.trim() || !currentUser || !chatId) return;
-    const senderId = currentUser.uid;
     try {
       setIsSending(true);
-      const messagePayload: Parameters<typeof sendChatMessage>[1] = {
+      const messagePayload: SendMessagePayload = {
         content: inputMessage.trim(),
-        senderId,
         type: 'text',
       };
       if (replyToMessage) {
@@ -237,6 +200,7 @@ export default function ChatConversationScreen() {
       const success = await sendChatMessage(chatId, messagePayload);
       if (success) {
         setInputMessage('');
+        setReplyToMessage(null);
       } else {
         Alert.alert('Error', 'Failed to send message. Please try again.');
       }
@@ -245,24 +209,15 @@ export default function ChatConversationScreen() {
       Alert.alert('Error', 'An unexpected error occurred while sending your message.');
     } finally {
       setIsSending(false);
-      setReplyToMessage(null);
     }
-  };
-  
-  const formatTime = (timestamp: Date | { toDate: () => Date } | number) => {
-    if (!timestamp) return '';
-    let date: Date;
-    if (typeof timestamp === 'object' && 'toDate' in timestamp) {
-      date = timestamp.toDate();
-    } else if (timestamp instanceof Date) {
-      date = timestamp;
-    } else {
-      date = new Date(timestamp);
-    }
+  }, [chatId, currentUser, inputMessage, replyToMessage]); // Added dependencies
+
+  const formatTime = useCallback((date: Date) => {
+    if (!date) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-  
-  const handleCleanupTestChat = async () => {
+  }, []);
+
+  const handleCleanupTestChat = useCallback(async () => {
     if (!isTestChatScreen) return;
     Alert.alert(
       'Clean Test Chat',
@@ -285,119 +240,89 @@ export default function ChatConversationScreen() {
         },
       ]
     );
-  };
+  }, [isTestChatScreen, navigation]); // Added dependencies
 
-  const handleSwipeReply = (message: Message) => {
+  const handleSwipeReply = useCallback((message: UIMessage) => {
     setReplyToMessage(message);
     Object.values(swipeableRefs.current).forEach(ref => ref?.close());
-  };
+  }, []); // swipeableRefs.current is stable
 
-  const renderLeftActions = () => {
-    return <View style={{ width: 70, backgroundColor: 'transparent' }} />;
-  };
-
-  const truncateText = (text: string, maxLength: number) => {
+  const truncateText = useCallback((text: string | undefined, maxLength: number) => {
+    if (!text) return '';
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength) + '...';
-  };
+  }, []);
 
-  const handleReplyContextTap = (originalMessageId: string) => {
+  const handleReplyContextTap = useCallback((originalMessageId: string) => {
     const originalMessageIndex = messages.findIndex(msg => msg.id === originalMessageId);
     if (originalMessageIndex !== -1 && flatListRef.current) {
       flatListRef.current.scrollToIndex({
         index: originalMessageIndex,
         animated: true,
-        viewPosition: 0.5, 
+        viewPosition: 0.5,
       });
       setHighlightedMessageId(originalMessageId);
-      setTimeout(() => setHighlightedMessageId(null), 1500); 
     } else {
       Alert.alert("Original message not found or not loaded yet.");
     }
-  };
+  }, [messages]); // flatListRef.current is stable
 
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (highlightedMessageId) {
-      timer = setTimeout(() => {
-        setHighlightedMessageId(null);
-      }, 1500); 
-    }
-    return () => clearTimeout(timer);
-  }, [highlightedMessageId]);
-
-  const handleLongPressMessage = (_message: Message) => {
+  const handleLongPressMessage = useCallback((message: UIMessage) => {
     if (selectedMessageForReaction !== null) {
       setReactionModalVisible(false);
       setSelectedMessageForReaction(null);
     } else {
-      const messageRef = messageRefs.current[_message.id];
+      const messageRef = messageRefs.current[message.id];
       if (messageRef) {
-        messageRef.measure((x, y, width, height, pageX, pageY) => {
-          const displayWidth = width || 200; 
+        messageRef.measure((_x, _y, _width = 200, _height, pageX, pageY) => { // Provide default for _width
           setReactionModalPosition({
-            x: pageX + displayWidth / 2, 
-            y: Math.max(60, pageY - 50) 
+            x: pageX + _width / 2,
+            y: Math.max(60, pageY - 50)
           });
-          setSelectedMessageForReaction(_message);
+          setSelectedMessageForReaction(message);
           setReactionModalVisible(true);
         });
       } else {
-        setSelectedMessageForReaction(_message);
+        setSelectedMessageForReaction(message);
+        setReactionModalPosition({ x: 150, y: 300 });
         setReactionModalVisible(true);
       }
     }
-  };
+  }, [selectedMessageForReaction]); // messageRefs.current is stable
 
-  const handleSelectReaction = async (emoji: string) => {
+  const handleSelectReaction = useCallback(async (emoji: string) => {
     if (!selectedMessageForReaction || !currentUser) return;
+    const messageToReact = selectedMessageForReaction;
     setReactionModalVisible(false);
+    setSelectedMessageForReaction(null);
+
     try {
-      await toggleReactionOnMessage(chatId, selectedMessageForReaction.id, emoji, currentUser.uid);
+      await toggleReactionOnMessage(chatId, messageToReact.id, emoji, currentUser.uid);
     } catch (error) {
       console.error("Error toggling reaction:", error);
       Alert.alert("Error", "Could not apply reaction.");
     }
-    setSelectedMessageForReaction(null);
-  };
+  }, [chatId, currentUser, selectedMessageForReaction]); // Added dependencies
 
-  const _requestPermissions = async () => {
-    try {
-      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-      const { status: mediaLibraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (cameraStatus !== 'granted' || mediaLibraryStatus !== 'granted') {
-        Alert.alert(
-          'Permissions Required', 
-          'Camera and media library permissions are required to send photos and videos.'
-        );
-        return false;
-      }
-      return true;
-    } catch (error) {
-      Alert.alert('Error', 'Failed to request permissions');
-      return false;
-    }
-  };
-
-  const handlePickMedia = async (type: 'gallery' | 'camera') => {
+  const handlePickMedia = useCallback(async (type: 'gallery' | 'camera') => {
     try {
       const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
-      const mediaLibraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (type === 'camera' && cameraPermission.status !== 'granted') {
-        Alert.alert('Camera Permission Required', 'Please grant camera permissions to take photos.');
+        Alert.alert('Camera Permission Required', 'Please grant camera permissions to take photos/videos.');
         return;
       }
+      const mediaLibraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (type === 'gallery' && mediaLibraryPermission.status !== 'granted') {
-        Alert.alert('Media Library Permission Required', 'Please grant media library permissions to select photos.');
+        Alert.alert('Media Library Permission Required', 'Please grant media library permissions to select items.');
         return;
       }
+
       const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.All, 
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: false,
-        aspect: [4, 3],
         quality: 0.8,
-        allowsMultipleSelection: false 
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
+        allowsMultipleSelection: false,
       };
       let result: ImagePicker.ImagePickerResult;
       if (type === 'gallery') {
@@ -405,60 +330,120 @@ export default function ChatConversationScreen() {
       } else {
         result = await ImagePicker.launchCameraAsync(pickerOptions);
       }
-      
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedItem = result.assets[0]; 
+        const selectedAsset = result.assets[0];
         setAttachmentMenuVisible(false);
-        
-        let normalizedType: 'image' | 'video';
-        if (selectedItem.type === 'video' || (selectedItem.uri?.match(/\.(mp4|mov)$/i))) {
-          normalizedType = 'video';
-        } else {
-          normalizedType = 'image';
+
+        let normalizedType: 'image' | 'video' = 'image';
+        if (selectedAsset.type === 'video' || (selectedAsset.uri?.toLowerCase().match(/\.(mp4|mov|avi|mkv|webm)$/i))) {
+            normalizedType = 'video';
         }
-        
-        const mediaItems = [{
-          uri: selectedItem.uri,
+
+        const mediaItemsToPreview: MediaItemForPreview[] = [{
+          uri: selectedAsset.uri,
           type: normalizedType,
-          width: selectedItem.width || 0,
-          height: selectedItem.height || 0,
-          duration: selectedItem.duration !== null ? selectedItem.duration : undefined,
+          width: selectedAsset.width,
+          height: selectedAsset.height,
+          duration: selectedAsset.duration !== null && selectedAsset.duration !== undefined ? selectedAsset.duration / 1000 : undefined,
+          fileName: selectedAsset.fileName || selectedAsset.uri.split('/').pop(),
         }];
-        
+
         await new Promise(resolve => setTimeout(resolve, 100));
         navigation.navigate('MediaPreview', {
-          mediaItems,
+          mediaItems: mediaItemsToPreview,
           chatId,
-          replyToMessage
+          replyToMessage: replyToMessage ? {
+            id: replyToMessage.id,
+            content: replyToMessage.content,
+            senderId: replyToMessage.senderId
+          } : undefined
         });
       }
     } catch (error) {
+      console.error("Error picking media:", error);
       Alert.alert(
-        'Error', 
-        `Could not access ${type.startsWith('camera') ? 'camera' : 'gallery'}.\n\n` +
-        `${error instanceof Error ? error.message : 'Unknown error'}`
+        'Error',
+        `Could not access ${type}. ${error instanceof Error ? error.message : 'Please check permissions.'}`
       );
     }
-  };
+  }, [navigation, chatId, replyToMessage]); // Added dependencies
 
-  const getDisplayNameForReply = (senderId: string) => {
+  const getDisplayNameForReply = useCallback((senderId: string) => {
     return senderId === currentUser?.uid ? "You" : partnerName;
-  };
-  
+  }, [currentUser?.uid, partnerName]);
+
+  const handleViewMedia = useCallback((message: UIMessage) => {
+      setViewingMedia(message);
+      setIsMediaViewerVisible(true);
+  }, []);
+
+  const handleNavigateToImageViewer = useCallback((
+        galleryItems: UIGalleryMediaItem[],
+        initialIndex: number,
+        galleryCaption?: string
+    ) => {
+        const imagesForViewer = galleryItems.map((gi, idx) => ({
+            id: `${gi.uri}-gallery-${idx}`,
+            uri: gi.uri,
+            caption: gi.caption || galleryCaption || '',
+            width: gi.dimensions?.width,
+            height: gi.dimensions?.height,
+        }));
+        navigation.navigate('ImageViewer', {
+            images: imagesForViewer,
+            initialIndex: initialIndex,
+        });
+  }, [navigation]);
+
+  const renderMessageItem = useCallback(({ item }: { item: UIMessage }) => {
+    const isCurrentUser = item.senderId === currentUser?.uid;
+    const isHighlighted = item.id === highlightedMessageId;
+
+    return (
+      <MessageItem
+        item={item}
+        isCurrentUser={isCurrentUser}
+        isDark={isDark}
+        isHighlighted={isHighlighted}
+        REPLY_PREVIEW_MAX_LENGTH={REPLY_PREVIEW_MAX_LENGTH}
+        swipeableRefs={swipeableRefs}
+        messageRefs={messageRefs}
+        onSwipeReply={handleSwipeReply}
+        onLongPressMessage={handleLongPressMessage}
+        onReplyContextTap={handleReplyContextTap}
+        formatTime={formatTime}
+        truncateText={truncateText}
+        getDisplayNameForReply={getDisplayNameForReply}
+        onViewMedia={handleViewMedia}
+        onNavigateToImageViewer={handleNavigateToImageViewer}
+      />
+    );
+  }, [
+      currentUser?.uid, isDark, highlightedMessageId,
+      handleSwipeReply, handleLongPressMessage, handleReplyContextTap,
+      formatTime, truncateText, getDisplayNameForReply,
+      handleViewMedia, handleNavigateToImageViewer,
+      // swipeableRefs and messageRefs are stable refs, often not needed in deps
+  ]);
+  // --- END OF HOOKS ---
+
+  // Conditional return for loading state MUST come AFTER all hook calls
   if (isLoading) {
     return (
-      <Container isDark={isDark} testID="chat-conversation-screen">
+      <Container isDark={isDark} testID="chat-conversation-screen-loading">
         <LoadingContainer>
           <ActivityIndicator size="large" color="#FF6B6B" />
         </LoadingContainer>
       </Container>
     );
   }
-  
+
+  // Main component JSX
   return (
     <Container isDark={isDark} testID="chat-conversation-screen">
       <HeaderContainer style={{ marginTop: Platform.OS === 'ios' ? 10 : 0 }}>
-        <BackButton 
+        <BackButton
           onPress={() => navigation.goBack()}
           accessibilityLabel="Go back"
           accessibilityRole="button"
@@ -475,7 +460,7 @@ export default function ChatConversationScreen() {
           )}
         </HeaderContent>
         {isTestChatScreen && isTestUser() ? (
-          <CleanupButton 
+          <CleanupButton
             onPress={handleCleanupTestChat}
             testID="cleanup-test-chat"
           >
@@ -483,7 +468,7 @@ export default function ChatConversationScreen() {
           </CleanupButton>
         ) : (
           <PlanDateButton
-            onPress={() => {}}
+            onPress={() => { /* Placeholder for future date planning feature */ }}
             accessibilityLabel="Plan a date"
             accessibilityRole="button"
           >
@@ -491,7 +476,7 @@ export default function ChatConversationScreen() {
           </PlanDateButton>
         )}
       </HeaderContainer>
-      
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -510,148 +495,22 @@ export default function ChatConversationScreen() {
               ref={flatListRef}
               data={messages}
               keyExtractor={(item) => item.id}
-              extraData={highlightedMessageId} 
-              renderItem={({ item }) => {
-                const isCurrentUser = item.senderId === currentUser?.uid;
-                const isHighlighted = item.id === highlightedMessageId;
-                
-                return (
-                  <Swipeable
-                    ref={(ref) => {
-                      swipeableRefs.current[item.id] = ref;
-                    }}
-                    renderLeftActions={renderLeftActions}
-                    onSwipeableOpen={() => handleSwipeReply(item)}
-                    overshootLeft={false} 
-                    friction={1.5}
-                  >
-                    <GestureTouchableOpacity
-                      onLongPress={() => handleLongPressMessage(item)}
-                      delayLongPress={300}
-                      activeOpacity={0.8}
-                    >
-                      <View 
-                          ref={(ref) => { 
-                            if (ref) messageRefs.current[item.id] = ref; 
-                          }}
-                        >
-                        <MessageContainer 
-                          isCurrentUser={isCurrentUser}
-                          isDark={isDark}
-                          testID={isCurrentUser ? 'sent-message' : 'received-message'}
-                        >
-                          <MessageBubble isDark={isDark} isCurrentUser={isCurrentUser} isHighlighted={isHighlighted}>
-                            {item.replyTo && (
-                              <ReplyContextContainer
-                                onPress={() => handleReplyContextTap(item.replyTo!.id)}
-                                isCurrentUser={isCurrentUser}
-                                isDark={isDark}
-                              >
-                                <ReplyContextSender isDark={isDark} isCurrentUser={isCurrentUser}>
-                                  {getDisplayNameForReply(item.replyTo.senderId)}
-                                </ReplyContextSender>
-                                <ReplyContextText isDark={isDark} isCurrentUser={isCurrentUser}>
-                                  {truncateText(item.replyTo.content, REPLY_PREVIEW_MAX_LENGTH)}
-                                </ReplyContextText>
-                              </ReplyContextContainer>
-                            )}
-                            {item.mediaType === 'image' && item.mediaUrl ? (
-                              <ImageMessageThumbnail
-                                id={item.id}
-                                uri={item.mediaUrl}
-                                caption={item.caption}
-                                dimensions={item.dimensions}
-                                isDark={isDark}
-                                isCurrentUser={isCurrentUser}
-                              />
-                            ) : item.mediaType === 'video' && (item.mediaUrl || item.thumbnailUrl) ? (
-                              <TouchableOpacity onPress={() => { setViewingMedia(item); setIsMediaViewerVisible(true); }}>
-                                <VideoPreviewContainer isDark={isDark} isCurrentUser={isCurrentUser}>
-                                  <StyledImage 
-                                    source={{ uri: item.thumbnailUrl || item.mediaUrl }} 
-                                    isDark={isDark} 
-                                    isCurrentUser={isCurrentUser} 
-                                    contentFit="cover"
-                                  />
-                                  <PlayIconOverlay>
-                                    <PlayIconText>▶</PlayIconText>
-                                  </PlayIconOverlay>
-                                </VideoPreviewContainer>
-                                {item.caption && <CaptionText isDark={isDark} isCurrentUser={isCurrentUser}>{item.caption}</CaptionText>}
-                              </TouchableOpacity>
-                            ) : (
-                              <MessageText isDark={isDark} isCurrentUser={isCurrentUser}>
-                                {item.content}
-                              </MessageText>
-                            )}
-                            {item.type === 'gallery' && (item as any).galleryItems && (item as any).galleryItems.length > 0 && (
-                              <View>
-                                {(item as any).galleryCaption && (
-                                  <CaptionText isDark={isDark} isCurrentUser={isCurrentUser} style={{ marginBottom: 8 }}>
-                                    {(item as any).galleryCaption}
-                                  </CaptionText>
-                                )}
-                                <GalleryGridContainer>
-                                  {(item as any).galleryItems.slice(0, 4).map((galleryItem: GalleryMediaItem, index: number) => (
-                                    <GalleryItemTouchable
-                                      key={index}
-                                      onPress={() => {
-                                        const imagesForViewer = (item as any).galleryItems!.map((gi: GalleryMediaItem, idx: number) => ({
-                                          id: `${item.id}-gallery-${idx}`,
-                                          uri: gi.uri,
-                                          caption: gi.caption || (item as any).galleryCaption || '',
-                                          width: gi.dimensions?.width || undefined,
-                                          height: gi.dimensions?.height || undefined,
-                                        }));
-                                        navigation.navigate('ImageViewer', {
-                                          images: imagesForViewer,
-                                          initialIndex: index,
-                                        });
-                                      }}
-                                    >
-                                      <GalleryThumbnailImage source={{ uri: galleryItem.thumbnailUrl || galleryItem.uri }} contentFit="cover" />
-                                      {galleryItem.type === 'video' && <VideoIconText>▶️</VideoIconText>}
-                                      {(item as any).galleryItems!.length > 4 && index === 3 && (
-                                        <MoreItemsOverlay>
-                                          <MoreItemsText>+{(item as any).galleryItems!.length - 4}</MoreItemsText>
-                                        </MoreItemsOverlay>
-                                      )}
-                                    </GalleryItemTouchable>
-                                  ))}
-                                </GalleryGridContainer>
-                              </View>
-                            )}
-                            <MessageTime isDark={isDark} isCurrentUser={isCurrentUser}>
-                              {formatTime(item.createdAt)}
-                            </MessageTime>
-                            {item.reactions && Object.keys(item.reactions).length > 0 && (
-                              <ReactionsContainer>
-                                {Object.entries(item.reactions || {}).map(([emoji, userIds]) => {
-                                  const users = Array.isArray(userIds) ? userIds : [];
-                                  return users.length > 0 ? (
-                                    <ReactionPill key={emoji}>
-                                      <ReactionEmoji>{emoji}</ReactionEmoji>
-                                      <ReactionCount>{users.length}</ReactionCount>
-                                    </ReactionPill>
-                                  ) : null;
-                                })}
-                              </ReactionsContainer>
-                            )}
-                          </MessageBubble>
-                        </MessageContainer>
-                      </View>
-                    </GestureTouchableOpacity>
-                  </Swipeable>
-                );
-              }}
+              renderItem={renderMessageItem}
+              extraData={{ highlightedMessageId, isDark }}
               contentContainerStyle={{ paddingVertical: 16, flexGrow: 1 }}
+              initialNumToRender={15}
+              maxToRenderPerBatch={10}
+              windowSize={21}
+              getItemLayout={(_data, index) => ( // Basic getItemLayout, adjust itemHeight as needed
+                { length: 50, offset: 50 * index, index } // Assuming average item height of 50
+              )}
             />
           )}
         </MessagesContainer>
         <Animated.View style={animatedReplyPanelStyle}>
             {replyToMessage && (
-              <View style={{ 
-                padding: 8, 
+              <View style={{
+                padding: 8,
                 backgroundColor: isDark ? '#2A2A2A' : '#EFEFEF',
                 borderBottomWidth: 1,
                 borderBottomColor: isDark ? '#444444' : '#DDDDDD',
@@ -660,23 +519,25 @@ export default function ChatConversationScreen() {
                 alignItems: 'center'
               }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ 
-                    fontSize: 13, 
-                    fontWeight: 'bold', 
+                  <Text style={{
+                    fontSize: 13,
+                    fontWeight: 'bold',
                     color: isDark ? '#BBBBBB' : '#555555'
-                  }}>
-                    {replyToMessage ? getDisplayNameForReply(replyToMessage.senderId) : ''}
+                  }}
+                  numberOfLines={1}
+                  >
+                    {getDisplayNameForReply(replyToMessage.senderId)}
                   </Text>
-                  <Text style={{ 
-                    fontSize: 13, 
+                  <Text style={{
+                    fontSize: 13,
                     color: isDark ? '#AAAAAA' : '#666666'
-                  }}>
-                    {replyToMessage ? truncateText(replyToMessage.content, REPLY_PREVIEW_MAX_LENGTH) : ''}
+                  }} numberOfLines={1} ellipsizeMode="tail">
+                    {truncateText(replyToMessage.content, REPLY_PREVIEW_MAX_LENGTH)}
                   </Text>
                 </View>
                 <TouchableOpacity style={{ padding: 8 }} onPress={() => setReplyToMessage(null)}>
-                  <Text style={{ 
-                    fontSize: 18, 
+                  <Text style={{
+                    fontSize: 18,
                     color: isDark ? '#AAAAAA' : '#666666'
                   }}>×</Text>
                 </TouchableOpacity>
@@ -685,7 +546,7 @@ export default function ChatConversationScreen() {
         </Animated.View>
         <InputOuterContainer>
           <InputContainer isDark={isDark}>
-            <AttachmentButton onPress={() => setAttachmentMenuVisible(true)} testID="attachment-button">
+            <AttachmentButton onPress={() => setAttachmentMenuVisible(true)} testID="attachment-button" accessibilityRole="button" accessibilityLabel="Attach media">
               <AttachmentIcon isDark={isDark}>📎</AttachmentIcon>
             </AttachmentButton>
             <MessageInput
@@ -697,8 +558,8 @@ export default function ChatConversationScreen() {
               multiline
               testID="message-input"
             />
-            <SendButton 
-            onPress={sendMessageInternal} 
+            <SendButton
+            onPress={sendMessageInternal}
             disabled={!inputMessage.trim() || isSending}
             accessibilityLabel="Send message"
             accessibilityRole="button"
@@ -710,20 +571,24 @@ export default function ChatConversationScreen() {
         </InputOuterContainer>
       </KeyboardAvoidingView>
 
+      {/* Reaction Modal */}
       <Modal
         transparent
         visible={reactionModalVisible}
-        onRequestClose={() => setReactionModalVisible(false)}
+        onRequestClose={() => {
+            setReactionModalVisible(false);
+            setSelectedMessageForReaction(null);
+        }}
         animationType="fade"
       >
-        <Pressable 
-          style={{ 
-            flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)' 
-          }} 
-          onPress={() => setReactionModalVisible(false)}
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+          onPress={() => {
+            setReactionModalVisible(false);
+            setSelectedMessageForReaction(null);
+          }}
         >
-          <Animated.View 
+          <Animated.View
             style={{
               position: 'absolute',
               flexDirection: 'row',
@@ -735,29 +600,32 @@ export default function ChatConversationScreen() {
               shadowOpacity: 0.25,
               shadowRadius: 3.84,
               top: reactionModalPosition.y,
-              left: reactionModalPosition.x - 150, 
+              left: reactionModalPosition.x - (EMOJI_REACTIONS.length * 40 / 2),
               backgroundColor: isDark ? '#333' : '#fff',
-              zIndex: 9999 
+              zIndex: 10,
             }}
+            onStartShouldSetResponder={() => true}
           >
             {EMOJI_REACTIONS.map(emoji => (
-              <TouchableOpacity 
-                key={emoji} 
-                onPress={() => handleSelectReaction(emoji)} 
-                style={{ 
+              <TouchableOpacity
+                key={emoji}
+                onPress={() => handleSelectReaction(emoji)}
+                style={{
                   padding: 8,
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
                   borderRadius: 20,
-                  marginHorizontal: 2
+                  marginHorizontal: 2,
                 }}
+                accessibilityLabel={`React with ${emoji}`}
+                accessibilityRole="button"
               >
-                <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                <Text style={{ fontSize: 24 }} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants">{emoji}</Text>
               </TouchableOpacity>
             ))}
           </Animated.View>
         </Pressable>
       </Modal>
 
+      {/* Attachment Menu Modal */}
       <Modal
         transparent
         visible={attachmentMenuVisible}
@@ -765,20 +633,23 @@ export default function ChatConversationScreen() {
         animationType="slide"
       >
         <AttachmentMenuOverlay onPress={() => setAttachmentMenuVisible(false)}>
-          <AttachmentMenuContent isDark={isDark}>
-            <AttachmentMenuButton onPress={() => handlePickMedia('camera')}>
-              <AttachmentMenuButtonText isDark={isDark}>Take Photo</AttachmentMenuButtonText>
-            </AttachmentMenuButton>
-            <AttachmentMenuButton onPress={() => handlePickMedia('gallery')}>
-              <AttachmentMenuButtonText isDark={isDark}>Choose from Gallery</AttachmentMenuButtonText>
-            </AttachmentMenuButton>
-            <AttachmentMenuButton onPress={() => setAttachmentMenuVisible(false)} style={{ marginTop: 10 }}>
-              <AttachmentMenuButtonText isDark={isDark} style={{ color: 'red' }}>Cancel</AttachmentMenuButtonText>
-            </AttachmentMenuButton>
-          </AttachmentMenuContent>
+          <View onStartShouldSetResponder={() => true} style={{ width: '100%' }}>
+            <AttachmentMenuContent isDark={isDark}>
+              <AttachmentMenuButton onPress={() => handlePickMedia('camera')}>
+                <AttachmentMenuButtonText isDark={isDark}>Take Photo or Video</AttachmentMenuButtonText>
+              </AttachmentMenuButton>
+              <AttachmentMenuButton onPress={() => handlePickMedia('gallery')}>
+                <AttachmentMenuButtonText isDark={isDark}>Choose from Gallery</AttachmentMenuButtonText>
+              </AttachmentMenuButton>
+              <AttachmentMenuButton onPress={() => setAttachmentMenuVisible(false)} style={{ marginTop: 10 }}>
+                <AttachmentMenuButtonText isDark={isDark} style={{ color: 'red' }}>Cancel</AttachmentMenuButtonText>
+              </AttachmentMenuButton>
+            </AttachmentMenuContent>
+          </View>
         </AttachmentMenuOverlay>
       </Modal>
 
+      {/* Media Viewer Modal */}
       {viewingMedia && (
         <Modal
           visible={isMediaViewerVisible}
@@ -790,28 +661,30 @@ export default function ChatConversationScreen() {
             <CloseButton onPress={() => setIsMediaViewerVisible(false)}>
               <CloseButtonText isDark={isDark}>✕</CloseButtonText>
             </CloseButton>
-            {viewingMedia.mediaType === 'image' && viewingMedia.mediaUrl && (
+            {viewingMedia.type === 'image' && viewingMedia.mediaUrl && (
               <Image
                 source={{ uri: viewingMedia.mediaUrl }}
                 style={{ flex: 1, width: '100%' }}
                 contentFit="contain"
+                accessibilityLabel={viewingMedia.caption || "Full screen image"}
               />
             )}
-            {viewingMedia.mediaType === 'video' && viewingMedia.mediaUrl && (
+            {viewingMedia.type === 'video' && viewingMedia.mediaUrl && (
               <Video
                 source={{ uri: viewingMedia.mediaUrl }}
                 style={{ flex: 1, width: '100%' }}
                 useNativeControls
                 resizeMode={ResizeMode.CONTAIN}
                 shouldPlay
+                accessibilityLabel={viewingMedia.caption || "Full screen video"}
               />
             )}
-            {viewingMedia.caption && <MediaCaptionText isDark={isDark}>{viewingMedia.caption}</MediaCaptionText>}
+            {viewingMedia.caption && (
+                <MediaCaptionText isDark={isDark}>{viewingMedia.caption}</MediaCaptionText>
+            )}
           </MediaViewerContainer>
         </Modal>
       )}
     </Container>
   );
 }
-
-// Styled components are now imported from ChatConversationScreen.styles.ts
