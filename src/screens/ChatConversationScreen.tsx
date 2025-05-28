@@ -14,11 +14,89 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Swipeable, TouchableOpacity as GestureTouchableOpacity } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeIn } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { auth } from '../services/firebase';
 import { AuthStackParamList, AuthNavigationProp } from '../navigation/types';
+import * as ImagePicker from 'expo-image-picker';
+// Removed styled-components import from here
+import { useAppTheme } from '../utils/useAppTheme';
+import {
+  sendMessage as sendChatMessage,
+  subscribeToMessages,
+  markMessagesAsRead,
+  isTestUser,
+  cleanupTestChat,
+  toggleReactionOnMessage,
+  ChatMessage as ChatServiceMessageType,
+} from '../services/chatService';
+import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
+import ImageMessageThumbnail from '../components/ImageMessageThumbnail';
 
-// Define MediaItem interface locally since it's not exported from navigation/types
+// Import styled components from the new styles file
+import {
+  Container,
+  LoadingContainer,
+  HeaderContainer,
+  HeaderContent,
+  BackButton,
+  BackButtonText,
+  HeaderTitle,
+  PlanDateButton,
+  CleanupButton,
+  CleanupButtonText,
+  TestChatBadge,
+  TestChatBadgeText,
+  PlanDateButtonText,
+  MessagesContainer,
+  EmptyContainer,
+  EmptyText,
+  MessageContainer,
+  MessageBubble,
+  StyledImage,
+  VideoPreviewContainer,
+  PlayIconOverlay,
+  PlayIconText,
+  MessageText,
+  CaptionText,
+  GalleryGridContainer,
+  GalleryItemTouchable,
+  GalleryThumbnailImage,
+  VideoIconText,
+  MoreItemsOverlay,
+  MoreItemsText,
+  MessageTime,
+  ReplyContextContainer,
+  ReplyContextSender,
+  ReplyContextText,
+  ReactionsContainer,
+  ReactionPill,
+  ReactionEmoji,
+  ReactionCount,
+  InputOuterContainer,
+  InputContainer,
+  AttachmentButton,
+  AttachmentIcon,
+  MessageInput,
+  SendButton,
+  SendButtonText,
+  AttachmentMenuOverlay,
+  AttachmentMenuContent,
+  AttachmentMenuButton,
+  AttachmentMenuButtonText,
+  MediaViewerContainer,
+  CloseButton,
+  CloseButtonText,
+  MediaCaptionText
+} from './ChatConversationScreen.styles';
+
+
+// Constants
+const REPLY_PREVIEW_MAX_LENGTH = 70;
+const REPLY_PANEL_HEIGHT = 60;
+
+type ChatConversationScreenRouteProp = RouteProp<AuthStackParamList, 'ChatConversation'>;
+
 export interface MediaItem {
   uri: string;
   type: 'image' | 'video';
@@ -28,10 +106,9 @@ export interface MediaItem {
   fileName?: string;
 };
 
-// Define GalleryMediaItem interface since it's no longer imported from chatService
 export interface GalleryMediaItem {
   url: string;
-  uri: string; // Some code uses url, some uses uri
+  uri: string; 
   type: string;
   width?: number;
   height?: number;
@@ -44,39 +121,11 @@ export interface GalleryMediaItem {
     height: number;
   };
 };
-import * as ImagePicker from 'expo-image-picker';
-import styled from 'styled-components/native';
-import { ThemeProps as BaseThemeProps } from '../utils/styled-components';
-import { useAppTheme } from '../utils/useAppTheme';
-import {
-  sendMessage as sendChatMessage,
-  subscribeToMessages,
-  markMessagesAsRead,
-  isTestUser,
-  cleanupTestChat,
-  toggleReactionOnMessage,
-  ChatMessage as ChatServiceMessageType, // Import the consolidated type and ChatMessage for type consistency
-} from '../services/chatService';
-import { Image } from 'expo-image'; // Using expo-image for better performance
-import { Video, ResizeMode } from 'expo-av';
-import ImageMessageThumbnail from '../components/ImageMessageThumbnail'; // Import our custom image thumbnail component
 
-// Constants
-const REPLY_PREVIEW_MAX_LENGTH = 70;
-const REPLY_PANEL_HEIGHT = 60; // Approximate height for animation
-
-type ChatConversationScreenRouteProp = RouteProp<AuthStackParamList, 'ChatConversation'>;
-
-// Media item type for navigation
-// Interface used for media items being passed to the MediaPreview screen
-// This is used in the navigation params for MediaPreview screen
-// MediaItem interface is already defined above
-
-interface Message extends Omit<ChatServiceMessageType, 'createdAt'> { // Inherit from chatService for consistency
+interface Message extends Omit<ChatServiceMessageType, 'createdAt'> { 
   id: string;
   senderId: string;
-  // Override createdAt to be more specific for UI if needed, or use the one from ChatServiceMessageType
-  createdAt: Date | { toDate: () => Date }; // More specific for UI rendering
+  createdAt: Date | { toDate: () => Date }; 
 }
 
 export default function ChatConversationScreen() {
@@ -91,13 +140,11 @@ export default function ChatConversationScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isTestChatScreen, setIsTestChatScreen] = useState(false);
 
-  // Reaction state
   const [reactionModalVisible, setReactionModalVisible] = useState(false);
   const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<Message | null>(null);
   const [reactionModalPosition, setReactionModalPosition] = useState({ x: 0, y: 0 });
   const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-  // Media sending states
   const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
   const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
   const [viewingMedia, setViewingMedia] = useState<Message | null>(null);
@@ -107,11 +154,9 @@ export default function ChatConversationScreen() {
 
   const flatListRef = useRef<FlatList>(null);
   const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
-  // Using MutableRefObject to avoid type errors with refs
   const messageRefs = useRef<Record<string, (View | null)>>({});
   const currentUser = auth.currentUser;
 
-  // Animation for reply panel
   const replyPanelAnimHeight = useSharedValue(0);
   const replyPanelAnimOpacity = useSharedValue(0);
 
@@ -123,20 +168,16 @@ export default function ChatConversationScreen() {
     };
   });
 
-    // Subscribe to messages and determine if this is a test chat
   useEffect(() => {
     if (!chatId || !currentUser) return;
     
-    // Check if this is a test chat
     const isTest = chatId.startsWith('testChat_');
     setIsTestChatScreen(isTest);
     
-    // Mark messages as read when conversation is opened
     void markMessagesAsRead(chatId).catch(error => {
       console.error('Error marking messages as read:', error);
     });
     
-    // Subscribe to messages using the chat service
     const unsubscribe = subscribeToMessages(chatId, (chatMessages) => {
       const formattedMessages = chatMessages.map(msg => ({
         ...msg
@@ -144,7 +185,6 @@ export default function ChatConversationScreen() {
       setMessages(formattedMessages);
       setIsLoading(false);
       
-      // Scroll to bottom on new messages
       if (chatMessages.length > 0 && flatListRef.current) {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
@@ -155,7 +195,6 @@ export default function ChatConversationScreen() {
     return unsubscribe;
   }, [chatId, currentUser]);
 
-  // Effect to handle reply panel animation
   useEffect(() => {
     if (replyToMessage) {
       replyPanelAnimHeight.value = withTiming(REPLY_PANEL_HEIGHT, { 
@@ -178,7 +217,7 @@ export default function ChatConversationScreen() {
     }
   }, [replyToMessage, replyPanelAnimHeight, replyPanelAnimOpacity]);
 
-  const sendMessageInternal = async () => { // Renamed to avoid conflict with imported sendMessage
+  const sendMessageInternal = async () => { 
     if (!inputMessage.trim() || !currentUser || !chatId) return;
     const senderId = currentUser.uid;
     try {
@@ -250,12 +289,10 @@ export default function ChatConversationScreen() {
 
   const handleSwipeReply = (message: Message) => {
     setReplyToMessage(message);
-    // Close other swipeables
     Object.values(swipeableRefs.current).forEach(ref => ref?.close());
   };
 
   const renderLeftActions = () => {
-    // Return an empty transparent view to maintain swipe functionality without visual elements
     return <View style={{ width: 70, backgroundColor: 'transparent' }} />;
   };
 
@@ -270,17 +307,16 @@ export default function ChatConversationScreen() {
       flatListRef.current.scrollToIndex({
         index: originalMessageIndex,
         animated: true,
-        viewPosition: 0.5, // Scroll to middle
+        viewPosition: 0.5, 
       });
       setHighlightedMessageId(originalMessageId);
-      setTimeout(() => setHighlightedMessageId(null), 1500); // Highlight for 1.5s
+      setTimeout(() => setHighlightedMessageId(null), 1500); 
     } else {
       Alert.alert("Original message not found or not loaded yet.");
     }
   };
 
   useEffect(() => {
-    // This effect is for cleaning up highlighted message state
     let timer: NodeJS.Timeout;
     if (highlightedMessageId) {
       timer = setTimeout(() => {
@@ -291,28 +327,22 @@ export default function ChatConversationScreen() {
   }, [highlightedMessageId]);
 
   const handleLongPressMessage = (_message: Message) => {
-    // Measure the position of the message container to position the reaction menu
     if (selectedMessageForReaction !== null) {
       setReactionModalVisible(false);
       setSelectedMessageForReaction(null);
     } else {
       const messageRef = messageRefs.current[_message.id];
       if (messageRef) {
-        // Measure the position of the message
         messageRef.measure((x, y, width, height, pageX, pageY) => {
-          // Calculate position for the reaction menu above the message
-          // We need to account for the message's position on screen
-          const displayWidth = width || 200; // Default width if measurement fails
-          
+          const displayWidth = width || 200; 
           setReactionModalPosition({
-            x: pageX + displayWidth / 2, // Center horizontally relative to the message
-            y: Math.max(60, pageY - 50) // Ensure it doesn't go above safe area
+            x: pageX + displayWidth / 2, 
+            y: Math.max(60, pageY - 50) 
           });
           setSelectedMessageForReaction(_message);
           setReactionModalVisible(true);
         });
       } else {
-        // Fallback if ref is not available
         setSelectedMessageForReaction(_message);
         setReactionModalVisible(true);
       }
@@ -331,14 +361,9 @@ export default function ChatConversationScreen() {
     setSelectedMessageForReaction(null);
   };
 
-  // This function requests permissions but is currently not used directly
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _requestPermissions = async () => {
     try {
-      // Request camera permissions
       const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-      
-      // Request media library permissions
       const { status: mediaLibraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (cameraStatus !== 'granted' || mediaLibraryStatus !== 'granted') {
@@ -348,7 +373,6 @@ export default function ChatConversationScreen() {
         );
         return false;
       }
-      
       return true;
     } catch (error) {
       Alert.alert('Error', 'Failed to request permissions');
@@ -369,11 +393,11 @@ export default function ChatConversationScreen() {
         return;
       }
       const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.All, // Updated to use MediaTypeOptions.All
+        mediaTypes: ImagePicker.MediaTypeOptions.All, 
         allowsEditing: false,
         aspect: [4, 3],
         quality: 0.8,
-        allowsMultipleSelection: false // Disabled multi-photo selection
+        allowsMultipleSelection: false 
       };
       let result: ImagePicker.ImagePickerResult;
       if (type === 'gallery') {
@@ -383,18 +407,13 @@ export default function ChatConversationScreen() {
       }
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedItem = result.assets[0]; // Only use the first selected item
-
-        // Dismiss the attachment menu before navigating
+        const selectedItem = result.assets[0]; 
         setAttachmentMenuVisible(false);
         
-        // Prepare navigation params
-        // Normalize type to only be 'image' or 'video' to match MediaItem interface
         let normalizedType: 'image' | 'video';
         if (selectedItem.type === 'video' || (selectedItem.uri?.match(/\.(mp4|mov)$/i))) {
           normalizedType = 'video';
         } else {
-          // Treat 'livePhoto', 'pairedVideo', and any other types as 'image'
           normalizedType = 'image';
         }
         
@@ -406,7 +425,6 @@ export default function ChatConversationScreen() {
           duration: selectedItem.duration !== null ? selectedItem.duration : undefined,
         }];
         
-        // Add a small delay to ensure any pending operations complete before navigation
         await new Promise(resolve => setTimeout(resolve, 100));
         navigation.navigate('MediaPreview', {
           mediaItems,
@@ -465,7 +483,7 @@ export default function ChatConversationScreen() {
           </CleanupButton>
         ) : (
           <PlanDateButton
-            onPress={() => {/* Placeholder for future date planning feature */}}
+            onPress={() => {}}
             accessibilityLabel="Plan a date"
             accessibilityRole="button"
           >
@@ -492,7 +510,7 @@ export default function ChatConversationScreen() {
               ref={flatListRef}
               data={messages}
               keyExtractor={(item) => item.id}
-              extraData={highlightedMessageId} // Ensure re-render on highlight change
+              extraData={highlightedMessageId} 
               renderItem={({ item }) => {
                 const isCurrentUser = item.senderId === currentUser?.uid;
                 const isHighlighted = item.id === highlightedMessageId;
@@ -504,7 +522,7 @@ export default function ChatConversationScreen() {
                     }}
                     renderLeftActions={renderLeftActions}
                     onSwipeableOpen={() => handleSwipeReply(item)}
-                    overshootLeft={false} // Prevent overswiping left for reply icon
+                    overshootLeft={false} 
                     friction={1.5}
                   >
                     <GestureTouchableOpacity
@@ -513,15 +531,13 @@ export default function ChatConversationScreen() {
                       activeOpacity={0.8}
                     >
                       <View 
-                          // The ref should be assigned to the outermost touchable component
-                          // or its direct child View if that's what's being measured.
-                          // If GestureTouchableOpacity is sufficient, this inner View might not be needed for ref.
                           ref={(ref) => { 
                             if (ref) messageRefs.current[item.id] = ref; 
                           }}
                         >
                         <MessageContainer 
                           isCurrentUser={isCurrentUser}
+                          isDark={isDark}
                           testID={isCurrentUser ? 'sent-message' : 'received-message'}
                         >
                           <MessageBubble isDark={isDark} isCurrentUser={isCurrentUser} isHighlighted={isHighlighted}>
@@ -540,7 +556,6 @@ export default function ChatConversationScreen() {
                               </ReplyContextContainer>
                             )}
                             {item.mediaType === 'image' && item.mediaUrl ? (
-                              /* Use our dedicated component for image thumbnails */
                               <ImageMessageThumbnail
                                 id={item.id}
                                 uri={item.mediaUrl}
@@ -553,7 +568,7 @@ export default function ChatConversationScreen() {
                               <TouchableOpacity onPress={() => { setViewingMedia(item); setIsMediaViewerVisible(true); }}>
                                 <VideoPreviewContainer isDark={isDark} isCurrentUser={isCurrentUser}>
                                   <StyledImage 
-                                    source={{ uri: item.thumbnailUrl || item.mediaUrl }} // Use mediaUrl as fallback for thumbnail
+                                    source={{ uri: item.thumbnailUrl || item.mediaUrl }} 
                                     isDark={isDark} 
                                     isCurrentUser={isCurrentUser} 
                                     contentFit="cover"
@@ -569,23 +584,22 @@ export default function ChatConversationScreen() {
                                 {item.content}
                               </MessageText>
                             )}
-                            {/* Gallery Rendering */}
-                            {item.type === 'gallery' && item.galleryItems && item.galleryItems.length > 0 && (
+                            {item.type === 'gallery' && (item as any).galleryItems && (item as any).galleryItems.length > 0 && (
                               <View>
-                                {item.galleryCaption && (
+                                {(item as any).galleryCaption && (
                                   <CaptionText isDark={isDark} isCurrentUser={isCurrentUser} style={{ marginBottom: 8 }}>
-                                    {item.galleryCaption}
+                                    {(item as any).galleryCaption}
                                   </CaptionText>
                                 )}
                                 <GalleryGridContainer>
-                                  {item.galleryItems.slice(0, 4).map((galleryItem: GalleryMediaItem, index: number) => (
+                                  {(item as any).galleryItems.slice(0, 4).map((galleryItem: GalleryMediaItem, index: number) => (
                                     <GalleryItemTouchable
                                       key={index}
                                       onPress={() => {
-                                        const imagesForViewer = item.galleryItems!.map((gi: GalleryMediaItem, idx: number) => ({
+                                        const imagesForViewer = (item as any).galleryItems!.map((gi: GalleryMediaItem, idx: number) => ({
                                           id: `${item.id}-gallery-${idx}`,
                                           uri: gi.uri,
-                                          caption: gi.caption || item.galleryCaption || '',
+                                          caption: gi.caption || (item as any).galleryCaption || '',
                                           width: gi.dimensions?.width || undefined,
                                           height: gi.dimensions?.height || undefined,
                                         }));
@@ -597,9 +611,9 @@ export default function ChatConversationScreen() {
                                     >
                                       <GalleryThumbnailImage source={{ uri: galleryItem.thumbnailUrl || galleryItem.uri }} contentFit="cover" />
                                       {galleryItem.type === 'video' && <VideoIconText>▶️</VideoIconText>}
-                                      {item.galleryItems!.length > 4 && index === 3 && (
+                                      {(item as any).galleryItems!.length > 4 && index === 3 && (
                                         <MoreItemsOverlay>
-                                          <MoreItemsText>+{item.galleryItems!.length - 4}</MoreItemsText>
+                                          <MoreItemsText>+{(item as any).galleryItems!.length - 4}</MoreItemsText>
                                         </MoreItemsOverlay>
                                       )}
                                     </GalleryItemTouchable>
@@ -613,7 +627,6 @@ export default function ChatConversationScreen() {
                             {item.reactions && Object.keys(item.reactions).length > 0 && (
                               <ReactionsContainer>
                                 {Object.entries(item.reactions || {}).map(([emoji, userIds]) => {
-                                  // Properly type userIds and check for presence
                                   const users = Array.isArray(userIds) ? userIds : [];
                                   return users.length > 0 ? (
                                     <ReactionPill key={emoji}>
@@ -685,7 +698,7 @@ export default function ChatConversationScreen() {
               testID="message-input"
             />
             <SendButton 
-            onPress={sendMessageInternal} // Use renamed function
+            onPress={sendMessageInternal} 
             disabled={!inputMessage.trim() || isSending}
             accessibilityLabel="Send message"
             accessibilityRole="button"
@@ -706,7 +719,7 @@ export default function ChatConversationScreen() {
         <Pressable 
           style={{ 
             flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)' // Make background semi-transparent to dim the chat
+            backgroundColor: 'rgba(0, 0, 0, 0.5)' 
           }} 
           onPress={() => setReactionModalVisible(false)}
         >
@@ -722,9 +735,9 @@ export default function ChatConversationScreen() {
               shadowOpacity: 0.25,
               shadowRadius: 3.84,
               top: reactionModalPosition.y,
-              left: reactionModalPosition.x - 150, // Center the modal horizontally (300px/2)
+              left: reactionModalPosition.x - 150, 
               backgroundColor: isDark ? '#333' : '#fff',
-              zIndex: 9999 // Ensure it's above other elements
+              zIndex: 9999 
             }}
           >
             {EMOJI_REACTIONS.map(emoji => (
@@ -745,7 +758,6 @@ export default function ChatConversationScreen() {
         </Pressable>
       </Modal>
 
-      {/* Attachment Menu Modal */}
       <Modal
         transparent
         visible={attachmentMenuVisible}
@@ -767,7 +779,6 @@ export default function ChatConversationScreen() {
         </AttachmentMenuOverlay>
       </Modal>
 
-      {/* Full Screen Media Viewer Modal */}
       {viewingMedia && (
         <Modal
           visible={isMediaViewerVisible}
@@ -803,372 +814,4 @@ export default function ChatConversationScreen() {
   );
 }
 
-interface ThemeProps extends BaseThemeProps {
-  isDark: boolean;
-}
-
-// Styled components
-const Container = styled(SafeAreaView)<ThemeProps>`
-  flex: 1;
-  background-color: ${(props: ThemeProps) => props.isDark ? '#121212' : '#ffffff'};
-`;
-
-const LoadingContainer = styled.View`
-  flex: 1;
-  justify-content: center;
-  align-items: center;
-`;
-
-const HeaderContainer = styled.View<ThemeProps>`
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-  border-bottom-width: 1px;
-  border-bottom-color: ${(props: ThemeProps) => props.isDark ? '#333333' : '#EEEEEE'};
-`;
-
-const HeaderContent = styled.View`
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-`;
-
-const BackButton = styled.TouchableOpacity`
-  width: 40px;
-  height: 40px;
-  justify-content: center;
-  align-items: center;
-`;
-
-const BackButtonText = styled.Text<ThemeProps>`
-  font-size: 24px;
-  color: ${(props: ThemeProps) => props.isDark ? '#ffffff' : '#000000'};
-`;
-
-const HeaderTitle = styled.Text<ThemeProps>`
-  font-size: 18px;
-  font-weight: bold;
-  color: ${(props: ThemeProps) => props.isDark ? '#ffffff' : '#000000'};
-`;
-
-const PlanDateButton = styled.TouchableOpacity`
-  padding: 8px 12px;
-  border-radius: 16px;
-  background-color: #FF6B6B;
-`;
-
-const CleanupButton = styled.TouchableOpacity`
-  padding: 8px 12px;
-  border-radius: 16px;
-  background-color: #FF9800;
-`;
-
-const CleanupButtonText = styled.Text`
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: bold;
-`;
-
-const TestChatBadge = styled.View`
-  background-color: #4CAF50;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-top: 4px;
-`;
-
-const TestChatBadgeText = styled.Text`
-  color: white;
-  font-size: 10px;
-  font-weight: bold;
-`;
-
-const PlanDateButtonText = styled.Text`
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: bold;
-`;
-
-const MessagesContainer = styled.View`
-  flex: 1;
-`;
-
-const EmptyContainer = styled.View`
-  flex: 1;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-`;
-
-const EmptyText = styled.Text<ThemeProps>`
-  font-size: 16px;
-  color: ${(props: ThemeProps) => props.isDark ? '#777777' : '#999999'};
-  text-align: center;
-`;
-
-interface MessageProps {
-  isCurrentUser: boolean;
-  isDark: boolean;
-  isHighlighted?: boolean;
-}
-
-const MessageContainer = styled.View<MessageProps>`
-  padding: 4px 16px;
-  align-items: ${(props: MessageProps) => props.isCurrentUser ? 'flex-end' : 'flex-start'};
-`;
-
-const MessageBubble = styled.View<MessageProps>`
-  max-width: 80%;
-  padding: 12px 16px;
-  border-radius: 20px;
-  background-color: ${(props: MessageProps) => 
-    props.isHighlighted ? (props.isDark ? '#555' : '#ddd') :
-    props.isCurrentUser 
-      ? '#FF6B6B' 
-      : props.isDark ? '#2C2C2C' : '#F0F0F0'};
-`;
-
-const StyledImage = styled(Image)<MessageProps>`
-  width: 200px;
-  height: 150px;
-  border-radius: 10px;
-  margin-bottom: ${(props: MessageProps) => (props.isCurrentUser || props.isDark) ? '4px' : '0px'}; /* Add margin if caption exists */
-`;
-
-const VideoPreviewContainer = styled.View<MessageProps>`
-  width: 200px;
-  height: 150px;
-  border-radius: 10px;
-  justify-content: center;
-  align-items: center;
-  background-color: ${(props: MessageProps) => props.isDark ? '#333' : '#e0e0e0'};
-`;
-
-const PlayIconOverlay = styled.View`
-  position: absolute;
-`;
-
-const PlayIconText = styled.Text`
-  font-size: 40px;
-  color: rgba(255, 255, 255, 0.8);
-`;
-
-const MessageText = styled.Text<MessageProps>`
-  font-size: 16px;
-  color: ${(props: MessageProps) => 
-    props.isCurrentUser 
-      ? '#FFFFFF' 
-      : props.isDark ? '#FFFFFF' : '#000000'};
-`;
-
-const CaptionText = styled.Text<MessageProps>`
-  font-size: 14px;
-  padding-top: 4px;
-  color: ${(props: MessageProps) => 
-    props.isCurrentUser ? 'rgba(255, 255, 255, 0.9)' : (props.isDark ? '#DDDDDD' : '#333333')};
-`;
-
-const GalleryGridContainer = styled.View`
-  flex-direction: row;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  max-width: 220px; /* Adjust as needed */
-`;
-
-const GalleryItemTouchable = styled.TouchableOpacity`
-  width: 100px; /* Adjust for 2x2 grid with spacing */
-  height: 100px; /* Adjust for 2x2 grid with spacing */
-  margin: 2.5px; /* Spacing between items */
-  border-radius: 8px;
-  overflow: hidden;
-  background-color: #e0e0e0; /* Placeholder background */
-  justify-content: center;
-  align-items: center;
-`;
-
-const GalleryThumbnailImage = styled(Image)`
-  width: 100%;
-  height: 100%;
-`;
-
-const VideoIconText = styled.Text`
-  position: absolute;
-  font-size: 24px;
-  opacity: 0.8;
-`;
-
-const MoreItemsOverlay = styled.View`
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0,0,0,0.5);
-  justify-content: center;
-  align-items: center;
-`;
-
-const MoreItemsText = styled.Text`
-  color: white;
-  font-size: 24px;
-  font-weight: bold;
-`;
-
-const MessageTime = styled.Text<MessageProps>`
-  font-size: 10px;
-  color: ${(props: MessageProps) => 
-    props.isCurrentUser 
-      ? 'rgba(255, 255, 255, 0.7)' 
-      : props.isDark ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)'};
-  align-self: flex-end;
-  margin-top: 4px;
-`;
-
-const ReplyContextContainer = styled.TouchableOpacity<MessageProps>`
-  background-color: ${(props: MessageProps) => props.isCurrentUser ? 'rgba(255,255,255,0.15)' : (props.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')};
-  padding: 6px 10px;
-  border-radius: 10px;
-  margin-bottom: 6px;
-  border-left-width: 3px;
-  border-left-color: ${(props: MessageProps) => props.isCurrentUser ? '#FFFFFF' : '#FF6B6B'};
-`;
-
-const ReplyContextSender = styled.Text<MessageProps>`
-  font-size: 12px;
-  font-weight: bold;
-  color: ${(props: MessageProps) => props.isCurrentUser ? '#FFFFFF' : (props.isDark ? '#DDDDDD' : '#333333')};
-`;
-
-const ReplyContextText = styled.Text<MessageProps>`
-  font-size: 12px;
-  color: ${(props: MessageProps) => props.isCurrentUser ? 'rgba(255,255,255,0.8)' : (props.isDark ? '#CCCCCC' : '#555555')};
-`;
-
-const ReactionsContainer = styled.View`
-  flex-direction: row;
-  margin-top: 8px;
-  align-self: flex-start; /* For received messages */
-  /* For sent messages, this will be overridden by MessageContainer align-items: flex-end */
-`;
-
-const ReactionPill = styled.View`
-  flex-direction: row;
-  align-items: center;
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 10px;
-  padding: 2px 6px;
-  margin-right: 4px;
-`;
-
-const ReactionEmoji = styled.Text`
-  font-size: 12px;
-`;
-
-const ReactionCount = styled.Text`
-  font-size: 12px;
-  margin-left: 3px;
-  color: #555;
-`;
-
-const InputOuterContainer = styled.View`
-`; // Wrapper for input and potential reply panel
-
-const InputContainer = styled.View<ThemeProps>`
-  flex-direction: row;
-  align-items: center;
-  padding: 12px 16px;
-  border-top-width: 1px;
-  border-top-color: ${(props: ThemeProps) => props.isDark ? '#333333' : '#EEEEEE'};
-  background-color: ${(props: ThemeProps) => props.isDark ? '#1E1E1E' : '#FFFFFF'};
-`;
-
-const AttachmentButton = styled.TouchableOpacity`
-  padding: 10px;
-  margin-right: 8px;
-`;
-
-const AttachmentIcon = styled.Text<ThemeProps>`
-  font-size: 22px;
-  color: ${(props: ThemeProps) => props.isDark ? '#FFF' : '#000'};
-`;
-
-
-const MessageInput = styled.TextInput<ThemeProps>`
-  flex: 1;
-  min-height: 40px;
-  max-height: 100px;
-  padding: 10px 16px;
-  border-radius: 20px;
-  background-color: ${(props: ThemeProps) => props.isDark ? '#2C2C2C' : '#F0F0F0'};
-  color: ${(props: ThemeProps) => props.isDark ? '#FFFFFF' : '#000000'};
-  margin-right: 12px;
-`;
-
-const SendButton = styled.TouchableOpacity<{ disabled?: boolean }>`
-  padding: 10px 16px;
-  border-radius: 20px;
-  background-color: #FF6B6B;
-  opacity: ${(props: { disabled?: boolean }) => props.disabled ? 0.5 : 1};
-`;
-
-const SendButtonText = styled.Text`
-  color: #FFFFFF;
-  font-weight: bold;
-`;
-
-const AttachmentMenuOverlay = styled.Pressable`
-  flex: 1;
-  justify-content: flex-end;
-  background-color: rgba(0,0,0,0.4);
-`;
-
-const AttachmentMenuContent = styled.View<ThemeProps>`
-  background-color: ${(props: ThemeProps) => props.isDark ? '#1E1E1E' : '#FFFFFF'};
-  padding: 16px;
-  border-top-left-radius: 16px;
-  border-top-right-radius: 16px;
-  padding-bottom: ${Platform.OS === 'ios' ? 30 : 16}px; /* Safe area for iOS bottom */
-`;
-
-const AttachmentMenuButton = styled.TouchableOpacity`
-  padding: 12px;
-  align-items: center;
-`;
-
-const AttachmentMenuButtonText = styled.Text<ThemeProps>`
-  font-size: 18px;
-  color: ${(props: ThemeProps) => props.isDark ? '#FFFFFF' : '#007AFF'};
-`;
-
-const MediaViewerContainer = styled.View<ThemeProps>`
-  flex: 1;
-  background-color: ${(props: ThemeProps) => props.isDark ? '#000' : '#FFF'};
-  justify-content: center;
-  align-items: center;
-`;
-
-const CloseButton = styled.TouchableOpacity`
-  position: absolute;
-  top: ${Platform.OS === 'ios' ? 50 : 20}px;
-  right: 20px;
-  padding: 10px;
-  z-index: 1;
-`;
-
-const CloseButtonText = styled.Text<ThemeProps>`
-  font-size: 24px;
-  font-weight: bold;
-  color: ${(props: ThemeProps) => props.isDark ? '#FFF' : '#000'};
-`;
-
-const MediaCaptionText = styled.Text<ThemeProps>`
-  position: absolute;
-  bottom: ${Platform.OS === 'ios' ? 40 : 20}px;
-  left: 20px;
-  right: 20px;
-  padding: 10px;
-  background-color: rgba(0,0,0,0.5);
-  color: #FFF;
-  border-radius: 8px;
-  text-align: center;
-  font-size: 16px;
-`;
+// Styled components are now imported from ChatConversationScreen.styles.ts
