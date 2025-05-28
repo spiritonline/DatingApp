@@ -2,8 +2,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FlatList,
-  // TouchableOpacity, // Now in ChatInput if needed for reply cancel
-  // Text, // Now in ChatInput if needed for reply cancel
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -35,7 +33,7 @@ import {
     AttachmentMenuModal,
     MediaViewerModal,
     EMOJI_REACTIONS_LIST,
-    ChatInput, // Import the new ChatInput component
+    ChatInput, 
 } from '../components/chat';
 
 import { UIMessage, GalleryMediaItem as UIGalleryMediaItem, MediaItemForPreview } from '../types/chat';
@@ -57,13 +55,6 @@ import {
   MessagesContainer,
   EmptyContainer,
   EmptyText,
-  // InputOuterContainer, // Handled by ChatInput
-  // InputContainer, // Handled by ChatInput
-  // AttachmentButton, // Handled by ChatInput
-  // AttachmentIcon, // Handled by ChatInput
-  // MessageInput, // Handled by ChatInput
-  // SendButton, // Handled by ChatInput
-  // SendButtonText, // Handled by ChatInput
 } from './ChatConversationScreen.styles';
 
 
