@@ -2,8 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FlatList,
-  TouchableOpacity,
-  Text,
+  // TouchableOpacity, // Now in ChatInput if needed for reply cancel
+  // Text, // Now in ChatInput if needed for reply cancel
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -35,6 +35,7 @@ import {
     AttachmentMenuModal,
     MediaViewerModal,
     EMOJI_REACTIONS_LIST,
+    ChatInput, // Import the new ChatInput component
 } from '../components/chat';
 
 import { UIMessage, GalleryMediaItem as UIGalleryMediaItem, MediaItemForPreview } from '../types/chat';
@@ -56,25 +57,18 @@ import {
   MessagesContainer,
   EmptyContainer,
   EmptyText,
-  InputOuterContainer,
-  InputContainer,
-  AttachmentButton,
-  AttachmentIcon,
-  MessageInput,
-  SendButton,
-  SendButtonText,
+  // InputOuterContainer, // Handled by ChatInput
+  // InputContainer, // Handled by ChatInput
+  // AttachmentButton, // Handled by ChatInput
+  // AttachmentIcon, // Handled by ChatInput
+  // MessageInput, // Handled by ChatInput
+  // SendButton, // Handled by ChatInput
+  // SendButtonText, // Handled by ChatInput
 } from './ChatConversationScreen.styles';
 
 
 const REPLY_PREVIEW_MAX_LENGTH = 70;
-const REPLY_PANEL_HEIGHT = 60;
-const SCREEN_WIDTH = Dimensions.get('window').width;
-
-interface ReactionTargetCoordinates {
-  targetY: number;
-  targetCenterX: number;
-  messageWidth: number;
-}
+const REPLY_PANEL_HEIGHT = 60; // This constant might still be needed for the animation value if passed
 
 type ChatConversationScreenRouteProp = RouteProp<AuthStackParamList, 'ChatConversation'>;
 
@@ -92,7 +86,7 @@ export default function ChatConversationScreen() {
 
   const [reactionModalVisible, setReactionModalVisible] = useState(false);
   const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<UIMessage | null>(null);
-  const [reactionTargetCoordinates, setReactionTargetCoordinates] = useState<ReactionTargetCoordinates | null>(null);
+  const [reactionTargetCoordinates, setReactionTargetCoordinates] = useState<{targetY: number; targetCenterX: number; messageWidth: number;} | null>(null);
 
   const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
   const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
@@ -183,6 +177,7 @@ export default function ChatConversationScreen() {
   const formatTime = useCallback((date: Date) => !date ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), []);
 
   const handleCleanupTestChat = useCallback(async () => {
+    // ... (implementation remains the same)
     if (!isTestChatScreen) return;
     Alert.alert('Clean Test Chat', 'Delete all messages?',
       [{ text: 'Cancel', style: 'cancel' },
@@ -215,6 +210,7 @@ export default function ChatConversationScreen() {
   }, [messages]);
 
   const handleLongPressMessage = useCallback((message: UIMessage) => {
+    // ... (implementation remains the same)
     if (selectedMessageForReaction) {
       setReactionModalVisible(false);
       setSelectedMessageForReaction(null);
@@ -233,13 +229,14 @@ export default function ChatConversationScreen() {
         });
       } else {
         setSelectedMessageForReaction(message);
-        setReactionTargetCoordinates({ targetY: SCREEN_WIDTH / 2, targetCenterX: SCREEN_WIDTH / 2, messageWidth: 200 });
+        setReactionTargetCoordinates({ targetY: Dimensions.get('window').height / 2, targetCenterX: Dimensions.get('window').width / 2, messageWidth: 200 });
         setReactionModalVisible(true);
       }
     }
   }, [selectedMessageForReaction]);
 
   const handleSelectReaction = useCallback(async (emoji: string) => {
+    // ... (implementation remains the same)
     if (!selectedMessageForReaction || !currentUser) return;
     const msgToReact = selectedMessageForReaction;
     setReactionModalVisible(false);
@@ -251,6 +248,7 @@ export default function ChatConversationScreen() {
   }, [chatId, currentUser, selectedMessageForReaction]);
 
   const handlePickMedia = useCallback(async (type: 'gallery' | 'camera') => {
+    // ... (implementation remains the same)
     try {
       const camPerm = await ImagePicker.requestCameraPermissionsAsync();
       if (type === 'camera' && camPerm.status !== 'granted') {
@@ -340,48 +338,24 @@ export default function ChatConversationScreen() {
             <FlatList data={messages} keyExtractor={(item) => item.id} renderItem={renderMessageItem} extraData={{ highlightedMessageId, isDark }} contentContainerStyle={{ paddingVertical: 16, flexGrow: 1 }} initialNumToRender={15} maxToRenderPerBatch={10} windowSize={21} getItemLayout={(_data, index) => ({ length: 50, offset: 50 * index, index })} />
           }
         </MessagesContainer>
-        <Animated.View style={animatedReplyPanelStyle}>
-          {replyToMessage && (
-            <View style={{ padding: 8, backgroundColor: isDark ? '#2A2A2A' : '#EFEFEF', borderBottomWidth: 1, borderBottomColor: isDark ? '#444444' : '#DDDDDD', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: isDark ? '#BBBBBB' : '#555555' }} numberOfLines={1}>{getDisplayNameForReply(replyToMessage.senderId)}</Text><Text style={{ fontSize: 13, color: isDark ? '#AAAAAA' : '#666666' }} numberOfLines={1} ellipsizeMode="tail">{truncateText(replyToMessage.content, REPLY_PREVIEW_MAX_LENGTH)}</Text></View>
-              <TouchableOpacity style={{ padding: 8 }} onPress={() => setReplyToMessage(null)}><Text style={{ fontSize: 18, color: isDark ? '#AAAAAA' : '#666666' }}>×</Text></TouchableOpacity>
-            </View>
-          )}
-        </Animated.View>
-        <InputOuterContainer>
-          <InputContainer isDark={isDark}>
-            <AttachmentButton 
-              onPress={() => setAttachmentMenuVisible(true)} 
-              testID="attachment-button" 
-              accessibilityRole="button" 
-              accessibilityLabel="Attach media"
-            >
-              <AttachmentIcon isDark={isDark}>📎</AttachmentIcon>
-            </AttachmentButton>
-            <MessageInput 
-              value={inputMessage} 
-              onChangeText={setInputMessage} 
-              placeholder="Type a message..." 
-              placeholderTextColor={isDark ? '#777777' : '#999999'} 
-              isDark={isDark} 
-              multiline 
-              testID="message-input" 
-            />
-            <SendButton 
-              onPress={sendMessageInternal} 
-              disabled={!inputMessage.trim() || isSending} 
-              accessibilityLabel="Send message" 
-              accessibilityRole="button" 
-              testID="send-button"
-              accessibilityState={{ disabled: !inputMessage.trim() || isSending }}
-            >
-              <SendButtonText>{isSending ? 'Sending...' : 'Send'}</SendButtonText>
-            </SendButton>
-          </InputContainer>
-        </InputOuterContainer>
+        
+        {/* Use the ChatInput component */}
+        <ChatInput
+          inputMessage={inputMessage}
+          onInputChange={setInputMessage}
+          onSendMessage={sendMessageInternal}
+          onAttachmentPress={() => setAttachmentMenuVisible(true)}
+          isSending={isSending}
+          isDark={isDark}
+          replyToMessage={replyToMessage}
+          onCancelReply={() => setReplyToMessage(null)}
+          animatedReplyPanelStyle={animatedReplyPanelStyle}
+          getDisplayNameForReply={getDisplayNameForReply}
+          truncateText={truncateText}
+          REPLY_PREVIEW_MAX_LENGTH={REPLY_PREVIEW_MAX_LENGTH}
+        />
       </KeyboardAvoidingView>
 
-      {/* Modals */}
       {reactionTargetCoordinates && (
         <ReactionModal
           isVisible={reactionModalVisible}
