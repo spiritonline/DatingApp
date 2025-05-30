@@ -12,6 +12,8 @@ import ChatConversationScreen from '../screens/ChatConversationScreen';
 import MediaPreviewScreen from '../screens/MediaPreviewScreen';
 import ImageViewerScreen from '../screens/ImageViewerScreen';
 import DebugImageViewerScreen from '../screens/DebugImageViewerScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
+import ImagePickerTestScreen from '../screens/debug/ImagePickerTestScreen';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
@@ -40,12 +42,34 @@ export function AuthNavigator({ initialRouteName = 'Welcome' }: AuthNavigatorPro
       <Stack.Screen name="MediaPreview" component={MediaPreviewScreen} />
       <Stack.Screen name="DebugImageViewer" component={DebugImageViewerScreen} />
       <Stack.Screen 
+        name="EditProfile" 
+        component={EditProfileScreen}
+        options={{
+          headerShown: true,
+          title: 'Edit Profile',
+          headerBackTitle: 'Cancel',
+          headerTintColor: '#FF6B6B',
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+        }}
+      />
+      <Stack.Screen 
         name="ImageViewer" 
         component={ImageViewerScreen} 
         options={{ 
           animation: 'fade',
           presentation: 'fullScreenModal', // Use fullScreenModal for true fullscreen
           headerShown: false
+        }}
+      />
+      <Stack.Screen 
+        name="ImagePickerTest" 
+        component={ImagePickerTestScreen} 
+        options={{
+          headerShown: true,
+          headerTitle: 'Image Picker Test',
+          animation: 'slide_from_right'
         }}
       />
     </Stack.Navigator>

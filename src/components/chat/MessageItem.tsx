@@ -1,16 +1,17 @@
 // src/components/chat/MessageItem.tsx
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { View, TouchableOpacity, Text } from 'react-native';
 import { Swipeable, TouchableOpacity as GestureTouchableOpacity } from 'react-native-gesture-handler';
-import { Image } from 'expo-image';
-import { ImageMessageThumbnail } from './index';
+// Use our cached image component for better performance
+import { CachedImage } from '../../components/CachedImage';
+// Import prefetchManager for proactive loading
+import { prefetchManager } from '../../services/cache/prefetchManager';
 
 import { UIMessage, GalleryMediaItem as UIGalleryMediaItem } from '../../types/chat';
 
 import {
     MessageContainer,
     MessageBubble,
-    StyledImage,
     VideoPreviewContainer,
     PlayIconOverlay,
     PlayIconText,
@@ -18,7 +19,6 @@ import {
     CaptionText,
     GalleryGridContainer,
     GalleryItemTouchable,
-    GalleryThumbnailImage,
     VideoIconText,
     MoreItemsOverlay,
     MoreItemsText,
@@ -30,7 +30,7 @@ import {
     ReactionPill,
     ReactionEmoji,
     ReactionCount,
-} from '../../screens/ChatConversationScreen.styles'; // Path to styles
+} from '../../screens/ChatConversationScreen.styles';
 
 interface MessageItemProps {
     item: UIMessage;
@@ -71,6 +71,31 @@ const MessageItem: React.FC<MessageItemProps> = ({
     const renderLeftActions = useCallback(() => {
         return <View style={{ width: 70, backgroundColor: 'transparent' }} />;
     }, []);
+    
+    // Prefetch media content when the component mounts
+    useEffect(() => {
+        if (item.type === 'image') {
+            // Prefetch image content for faster loading
+            if (item.mediaUrl) {
+                prefetchManager.prefetchImage(item.mediaUrl, 'high');
+            } else if (item.content) {
+                prefetchManager.prefetchImage(item.content, 'high');
+            }
+        } else if (item.type === 'video' && item.thumbnailUrl) {
+            // Prefetch video thumbnails
+            prefetchManager.prefetchImage(item.thumbnailUrl, 'normal');
+        } else if (item.type === 'gallery' && item.galleryItems && item.galleryItems.length > 0) {
+            // Prefetch the first few gallery thumbnails
+            const thumbnailUrls = item.galleryItems
+                .slice(0, 4)
+                .map(galleryItem => galleryItem.thumbnailUrl || galleryItem.uri)
+                .filter(Boolean);
+            
+            if (thumbnailUrls.length) {
+                prefetchManager.prefetchImages(thumbnailUrls, 'normal');
+            }
+        }
+    }, [item]);
 
     const replyContent = item.replyTo ? truncateText(item.replyTo.content, REPLY_PREVIEW_MAX_LENGTH) : '';
     const replySenderName = item.replyTo ? getDisplayNameForReply(item.replyTo.senderId) : '';
@@ -103,7 +128,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                         <MessageBubble isDark={isDark} isCurrentUser={isCurrentUser} isHighlighted={isHighlighted}>
                             {item.replyTo && (
                                 <ReplyContextContainer
-                                    onPress={() => item.replyTo && onReplyContextTap(item.replyTo.id)} // Added null check
+                                    onPress={() => item.replyTo && onReplyContextTap(item.replyTo.id)}
                                     isCurrentUser={isCurrentUser}
                                     isDark={isDark}
                                 >
@@ -116,25 +141,58 @@ const MessageItem: React.FC<MessageItemProps> = ({
                                 </ReplyContextContainer>
                             )}
 
-                            {item.type === 'image' && item.mediaUrl ? (
-                                <ImageMessageThumbnail
-                                    uri={item.mediaUrl}
-                                    caption={item.caption}
-                                    dimensions={item.dimensions}
-                                    isDark={isDark}
-                                    isCurrentUser={isCurrentUser}
-                                />
+                            {item.type === 'image' ? (
+                                <View style={{ maxWidth: 250, alignSelf: isCurrentUser ? 'flex-end' : 'flex-start' }}>
+                                    {/* Use direct press handler function to avoid closure issues */}
+                                    <GestureTouchableOpacity 
+                                        onPress={() => {
+                                            console.log('Image pressed, item ID:', item.id);
+                                            console.log('Image type:', item.type);
+                                            console.log('Image URL:', item.mediaUrl || item.content);
+                                            
+                                            // Create gallery item for the ImageViewer with all required properties
+                                            const imageUri = item.mediaUrl || item.content;
+                                            if (imageUri) {
+                                                const galleryItems: UIGalleryMediaItem[] = [{
+                                                    uri: imageUri,
+                                                    type: 'image' as const, // Use type literal with 'as const' for type safety
+                                                    dimensions: item.dimensions,
+                                                    caption: item.caption || ''
+                                                }];
+                                                onNavigateToImageViewer(galleryItems, 0);
+                                            }
+                                        }}
+                                        activeOpacity={0.7}
+                                        delayPressIn={0}
+                                    >
+                                        <View style={{ width: 250, height: 200, borderRadius: 10, overflow: 'hidden' }}>
+                                            <CachedImage 
+                                                source={{ uri: item.mediaUrl || item.content || '' }} 
+                                                style={{ 
+                                                    width: '100%', 
+                                                    height: '100%'
+                                                }}
+                                                resizeMode="cover"
+                                                prefetch={true}
+                                                priority="high"
+                                                showLoadingIndicator={true}
+                                            />
+                                        </View>
+                                        {item.caption && <CaptionText isDark={isDark} isCurrentUser={isCurrentUser}>{item.caption}</CaptionText>}
+                                    </GestureTouchableOpacity>
+                                </View>
                             ) : item.type === 'video' && (item.mediaUrl || item.thumbnailUrl) ? (
                                 <TouchableOpacity onPress={() => onViewMedia(item)}>
                                     <VideoPreviewContainer isDark={isDark} isCurrentUser={isCurrentUser}>
-                                        <StyledImage
-                                            source={{ uri: item.thumbnailUrl || item.mediaUrl }}
-                                            isDark={isDark}
-                                            isCurrentUser={isCurrentUser}
-                                            contentFit="cover"
+                                        <CachedImage 
+                                            source={{ uri: item.thumbnailUrl || item.mediaUrl || '' }} 
+                                            style={{ width: '100%', height: 200, borderRadius: 8 }}
+                                            prefetch={true}
+                                            priority="normal"
+                                            showLoadingIndicator={true}
                                         />
                                         <PlayIconOverlay>
-                                            <PlayIconText>▶</PlayIconText>
+                                            <PlayIconText>▶️</PlayIconText>
                                         </PlayIconOverlay>
                                     </VideoPreviewContainer>
                                     {item.caption && <CaptionText isDark={isDark} isCurrentUser={isCurrentUser}>{item.caption}</CaptionText>}
@@ -156,7 +214,13 @@ const MessageItem: React.FC<MessageItemProps> = ({
                                                     }
                                                 }}
                                             >
-                                                <GalleryThumbnailImage source={{ uri: galleryItem.thumbnailUrl || galleryItem.uri }} contentFit="cover" />
+                                                <CachedImage 
+                                                    source={{ uri: galleryItem.thumbnailUrl || galleryItem.uri }} 
+                                                    style={{ width: '100%', height: '100%', borderRadius: 4 }}
+                                                    prefetch={true}
+                                                    priority="normal"
+                                                    showLoadingIndicator={true}
+                                                />
                                                 {galleryItem.type === 'video' && <VideoIconText>▶️</VideoIconText>}
                                                 {item.galleryItems && item.galleryItems.length > 4 && index === 3 && (
                                                     <MoreItemsOverlay>

@@ -1,3 +1,6 @@
+// Import polyfills first to ensure they're loaded before any Firebase-related code
+import './src/utils/polyfills';
+
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';

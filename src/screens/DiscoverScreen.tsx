@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   useColorScheme, 
   Modal, 
@@ -31,6 +31,8 @@ import { useLikeHandler } from '../hooks/useLikeHandler';
 import { RootState } from '../store';
 import { fetchTodayLikes } from '../store/likesSlice';
 import { ThemeProps } from '../utils/styled-components';
+import { CachedImage } from '../components/CachedImage';
+import { prefetchManager } from '../services/cache/prefetchManager';
 
 // Create a new QueryClient instance
 const queryClient = new QueryClient();
@@ -73,8 +75,10 @@ function DiscoverScreen() {
     profiles, 
     isLoading, 
     isError, 
+    error,
     fetchNextPage, 
-    resetProfiles 
+    resetProfiles,
+    hasMore
   } = useProfiles();
   
   // Like handling logic
@@ -96,38 +100,126 @@ function DiscoverScreen() {
     opacity: fadeAnim.value,
   }));
   
+  // Track prefetched URIs to avoid duplicates
+  const prefetchedUris = useRef<Set<string>>(new Set());
+  
   // On mount, fetch today's like count
   useEffect(() => {
+    // Get today's like count from Redux
     if (currentUid) {
       dispatch(fetchTodayLikes(currentUid) as any);
     }
-  }, [dispatch, currentUid]);
+  }, [currentUid, dispatch]);
+  
+  // Add tab focus effect to prefetch images when the Discover tab is focused
+  useEffect(() => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      console.log('Discover tab focused, prefetching images');
+      
+      // When the tab is focused, prefetch the current and next few profiles' images
+      if (profiles && profiles.length > 0) {
+        // Calculate how many profiles to prefetch (current + next 2)
+        const endIndex = Math.min(currentProfileIndex + 3, profiles.length);
+        const profilesToPreload = profiles.slice(currentProfileIndex, endIndex);
+        
+        // Prefetch each profile's photos with high priority
+        profilesToPreload.forEach(profile => {
+          if (profile.photos && profile.photos.length > 0) {
+            // Prefetch the main photo with high priority
+            prefetchManager.prefetchImage(profile.photos[0], 'high');
+            
+            // Prefetch additional photos with normal priority
+            if (profile.photos.length > 1) {
+              profile.photos.slice(1).forEach(photoUrl => {
+                prefetchManager.prefetchImage(photoUrl, 'normal');
+              });
+            }
+          }
+        });
+      }
+    });
+
+    return () => {
+      // Clean up the event listener
+      unsubscribeFocus();
+    };
+  }, [navigation, profiles, currentProfileIndex]);
+  
+  // Prefetch profile images when profiles change
+  useEffect(() => {
+    if (profiles.length > 0) {
+      // Prefetch current profile's photos
+      const currentProfile = profiles[0];
+      if (currentProfile?.photos?.length) {
+        currentProfile.photos.forEach(uri => {
+          if (!prefetchedUris.current.has(uri)) {
+            prefetchManager.prefetchImage(uri, 'high');
+            prefetchedUris.current.add(uri);
+          }
+        });
+      }
+      
+      // Prefetch next few profiles' first photo
+      const nextProfiles = profiles.slice(1, 4); // Prefetch next 3 profiles
+      nextProfiles.forEach(profile => {
+        if (profile?.photos?.[0] && !prefetchedUris.current.has(profile.photos[0])) {
+          prefetchManager.prefetchImage(profile.photos[0], 'normal');
+          prefetchedUris.current.add(profile.photos[0]);
+        }
+      });
+    }
+  }, [profiles]);
+
+  // Clean up prefetch set on unmount
+  useEffect(() => {
+    return () => {
+      prefetchedUris.current.clear();
+    };
+  }, []);
   
   // Handle advancing to the next profile
   const goToNextProfile = useCallback(async () => {
+    // Don't proceed if already loading
+    if (isLoading || isLoadingNext) return;
+    
     // First animate fade out
     fadeAnim.value = withTiming(0, { duration: 300 });
     
     setTimeout(async () => {
-      // If we're at the last profile or close to it, fetch more
-      if (currentProfileIndex >= profiles.length - 2 && !isLoading) {
-        setIsLoadingNext(true);
-        await fetchNextPage();
-        setIsLoadingNext(false);
+      try {
+        // If we're at the last profile or close to it, fetch more
+        if (currentProfileIndex >= profiles.length - 2 && hasMore && !isLoading) {
+          setIsLoadingNext(true);
+          await fetchNextPage();
+          setIsLoadingNext(false);
+        }
+        
+        // Reset photo index for the new profile
+        setCurrentPhotoIndex(0);
+        
+        // Move to next profile if available
+        if (currentProfileIndex < profiles.length - 1) {
+          setCurrentProfileIndex(prev => prev + 1);
+        } else if (hasMore) {
+          // If we've reached the end but there might be more, reset to show loading
+          setCurrentProfileIndex(0);
+          await resetProfiles();
+        } else {
+          // No more profiles to show
+          Alert.alert(
+            'No More Profiles', 
+            'You\'ve seen all available profiles. Check back later for new matches!'
+          );
+        }
+      } catch (err) {
+        console.error('Error loading next profile:', err);
+        Alert.alert('Error', 'Failed to load next profile. Please try again.');
+      } finally {
+        // Always ensure we have a smooth fade in
+        fadeAnim.value = withTiming(1, { duration: 300 });
       }
-      
-      // Reset photo index for the new profile
-      setCurrentPhotoIndex(0);
-      
-      // Move to next profile if available
-      if (currentProfileIndex < profiles.length - 1) {
-        setCurrentProfileIndex(prev => prev + 1);
-      }
-      
-      // Animate fade in
-      fadeAnim.value = withTiming(1, { duration: 300 });
     }, 300);
-  }, [currentProfileIndex, profiles.length, isLoading, fetchNextPage, fadeAnim]);
+  }, [currentProfileIndex, profiles.length, isLoading, isLoadingNext, hasMore, fetchNextPage, fadeAnim, resetProfiles]);
   
   // Handle the dismiss button press
   const handleDismiss = () => {
@@ -168,13 +260,27 @@ function DiscoverScreen() {
   }
   
   // If initial loading or no profiles, show loading state
-  if (isLoading || profiles.length === 0) {
+  if (isLoading && profiles.length === 0) {
     return (
       <Container isDark={isDark} testID="discover-screen">
         <LoadingContainer>
           <ActivityIndicator size="large" color="#FF6B6B" />
           <LoadingText isDark={isDark}>Finding people for you...</LoadingText>
         </LoadingContainer>
+      </Container>
+    );
+  }
+  
+  // If no profiles found after loading
+  if (!isLoading && profiles.length === 0) {
+    return (
+      <Container isDark={isDark} testID="discover-screen">
+        <ErrorContainer>
+          <ErrorText isDark={isDark}>No profiles found</ErrorText>
+          <RetryButton onPress={resetProfiles}>
+            <RetryButtonText>Refresh</RetryButtonText>
+          </RetryButton>
+        </ErrorContainer>
       </Container>
     );
   }
@@ -186,7 +292,7 @@ function DiscoverScreen() {
         contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       >
-        {currentProfile && (
+        {currentProfile ? (
           <Animated.View 
             style={[{ flex: 1 }, animatedStyle]}
             entering={FadeIn.duration(300)}
@@ -197,25 +303,34 @@ function DiscoverScreen() {
             {currentProfile.photos.map((photoUrl, photoIndex) => (
               <View key={`photo-${photoIndex}`}>
                 {/* Photo */}
-                <ProfilePhoto 
-                  source={{ uri: photoUrl }} 
-                  width={width}
-                  resizeMode="cover"
+                <View 
+                  style={{ width, height: width * 1.3 }}
+                  accessible={true}
                   accessibilityLabel={`Photo ${photoIndex + 1} of ${currentProfile.name}`}
-                />
+                  accessibilityRole="image"
+                >
+                  <CachedImage 
+                    source={{ uri: photoUrl }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                    priority={photoIndex === 0 ? 'high' : 'normal'}
+                    showLoadingIndicator={true}
+                  />
+                </View>
                 
                 {/* Show name & age below the first photo */}
                 {photoIndex === 0 && (
                   <ProfileInfoContainer>
-                    <NameAgeText isDark={isDark}>
-                      {currentProfile.name}, {currentProfile.age}
-                    </NameAgeText>
-                    
-                    {/* Mutual friends badge if any */}
+                    <ProfileName>{currentProfile.name}, {currentProfile.age}</ProfileName>
+                    {/* Debug Info - Show UID */}
+                    <ProfileBio>ID: {currentProfile.id}</ProfileBio>
+                    {currentProfile.uid && currentProfile.uid !== currentProfile.id && (
+                      <ProfileBio>UID: {currentProfile.uid}</ProfileBio>
+                    )}
                     {currentProfile.mutualFriendsCount > 0 && (
                       <MutualFriendsContainer>
-                        <MutualFriendsText isDark={isDark}>
-                          👥 {currentProfile.mutualFriendsCount} mutual friends
+                        <MutualFriendsText>
+                          {"👥"} {currentProfile.mutualFriendsCount} mutual friends
                         </MutualFriendsText>
                       </MutualFriendsContainer>
                     )}
@@ -236,6 +351,11 @@ function DiscoverScreen() {
               </View>
             ))}
           </Animated.View>
+        ) : (
+          <LoadingContainer>
+            <ActivityIndicator size="large" color="#FF6B6B" />
+            <LoadingText isDark={isDark}>Loading next profile...</LoadingText>
+          </LoadingContainer>
         )}
       </ScrollView>
       
@@ -361,13 +481,22 @@ const Container = styled(SafeAreaView)<ThemeProps>`
   background-color: ${(props: ThemeProps) => props.isDark ? '#121212' : '#ffffff'};
 `;
 
-const ProfilePhoto = styled.Image<ProfilePhotoStyledProps>`
-  width: ${(props: ProfilePhotoStyledProps) => props.width}px;
-  height: ${(props: ProfilePhotoStyledProps) => props.width * 1.3}px;
-`;
+// No longer need this as we're using CachedImage directly with inline styles
 
 const ProfileInfoContainer = styled.View`
   padding: 16px;
+`;
+
+const ProfileName = styled.Text<ThemeProps>`
+  font-size: 28px;
+  font-weight: bold;
+  color: ${(props: ThemeProps) => props.isDark ? '#ffffff' : '#000000'};
+`;
+
+const ProfileBio = styled.Text<ThemeProps>`
+  font-size: 16px;
+  color: ${(props: ThemeProps) => props.isDark ? '#cccccc' : '#666666'};
+  margin-top: 4px;
 `;
 
 const NameAgeText = styled.Text<ThemeProps>`

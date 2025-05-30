@@ -24,13 +24,37 @@ const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
   viewingMedia,
   isDark,
 }) => {
+  console.log('MediaViewerModal rendering with:', { 
+    isVisible, 
+    hasMedia: !!viewingMedia,
+    mediaType: viewingMedia?.type,
+    mediaUrl: viewingMedia?.mediaUrl,
+    content: viewingMedia?.content
+  });
+
+  // Early return if modal shouldn't be visible
+  if (!isVisible) {
+    return null;
+  }
+
+  // Return a placeholder if somehow media is missing
   if (!viewingMedia) {
-    return null; // Or some fallback if it can be visible without media (should not happen)
+    console.log('Warning: MediaViewerModal visible but no viewingMedia provided');
+    return (
+      <Modal visible={true} transparent={false} onRequestClose={onClose} animationType="fade">
+        <MediaViewerContainer isDark={isDark}>
+          <CloseButton onPress={onClose} testID="close-media-viewer-button">
+            <CloseButtonText isDark={isDark}>✕</CloseButtonText>
+          </CloseButton>
+          <MediaCaptionText isDark={isDark}>No media content available</MediaCaptionText>
+        </MediaViewerContainer>
+      </Modal>
+    );
   }
 
   return (
     <Modal
-      visible={isVisible}
+      visible={true}
       transparent={false} // Full screen
       onRequestClose={onClose}
       animationType="fade"
@@ -40,17 +64,17 @@ const MediaViewerModal: React.FC<MediaViewerModalProps> = ({
           <CloseButtonText isDark={isDark}>✕</CloseButtonText>
         </CloseButton>
 
-        {viewingMedia.type === 'image' && viewingMedia.mediaUrl && (
+        {viewingMedia.type === 'image' && (viewingMedia.mediaUrl || viewingMedia.content) && (
           <Image
-            source={{ uri: viewingMedia.mediaUrl }}
+            source={{ uri: viewingMedia.mediaUrl || viewingMedia.content || '' }}
             style={{ flex: 1, width: '100%' }}
             contentFit="contain"
             accessibilityLabel={viewingMedia.caption || "Full screen image"}
           />
         )}
-        {viewingMedia.type === 'video' && viewingMedia.mediaUrl && (
+        {viewingMedia.type === 'video' && (viewingMedia.mediaUrl || viewingMedia.content) && (
           <Video
-            source={{ uri: viewingMedia.mediaUrl }}
+            source={{ uri: viewingMedia.mediaUrl || viewingMedia.content || '' }}
             style={{ flex: 1, width: '100%' }}
             useNativeControls
             resizeMode={ResizeMode.CONTAIN}

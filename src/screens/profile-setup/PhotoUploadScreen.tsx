@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { auth, db, storage } from '../../services/firebase';
 import { doc, updateDoc, getDoc, setDoc } from '@firebase/firestore';
@@ -28,6 +27,7 @@ import {
   ProgressBarProps 
 } from '../../utils/styled-components';
 import { validatePhotoUpload, PhotoItem, SimpleValidationResult } from './utils/validation';
+import { useImagePicker } from '../../hooks/useImagePicker';
 
 // Using PhotoItem from our validation utility
 
@@ -53,38 +53,48 @@ export default function PhotoUploadScreen() {
     }
   }, [profile]);
 
-  // Request permissions when component mounts
-  useEffect(() => {
-    (async () => {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please grant camera roll permissions to upload photos.'
-        );
-      }
-    })();
-  }, []);
+  // We don't need to request permissions here anymore as it's handled by the image picker service
 
-  const handleAddPhoto = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], // Updated from deprecated MediaTypeOptions.Images
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.7, // Reduced quality for iOS compatibility
-        exif: false,  // Disable EXIF to reduce file size
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
+  const { pickFromGallery, pickFromCamera } = useImagePicker({
+    onPickerSuccess: (result) => {
+      if (result.assets.length > 0) {
+        const asset = result.assets[0];
         const newPhoto = {
-          uri: result.assets[0].uri,
+          uri: asset.uri,
           id: Date.now().toString(),
         };
         setPhotos([...photos, newPhoto]);
       }
-    } catch (error) {
+    },
+    onPickerError: (error) => {
       console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  });
+
+  const handleAddPhoto = async () => {
+    try {
+      // Show action sheet for choosing source
+      Alert.alert(
+        'Add Photo',
+        'Choose a photo source',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Take Photo', 
+            onPress: () => pickFromCamera('profile')
+          },
+          { 
+            text: 'Choose from Gallery', 
+            onPress: () => pickFromGallery('profile', { 
+              multiple: false, 
+              cropping: true
+            })
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error in handleAddPhoto:', error);
       Alert.alert('Error', 'Failed to select image. Please try again.');
     }
   };

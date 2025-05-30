@@ -14,8 +14,8 @@ import { Swipeable } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 import { auth } from '../services/firebase';
 import { AuthStackParamList, AuthNavigationProp } from '../navigation/types';
-import * as ImagePicker from 'expo-image-picker';
 import { useAppTheme } from '../utils/useAppTheme';
+import { useImagePicker } from '../hooks/useImagePicker';
 import {
   sendMessage as sendChatMessage,
   subscribeToMessages,
@@ -82,6 +82,19 @@ export default function ChatConversationScreen() {
   const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
   const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
   const [viewingMedia, setViewingMedia] = useState<UIMessage | null>(null);
+  
+  // Add effect to ensure modal state consistency
+  useEffect(() => {
+    if (viewingMedia && !isMediaViewerVisible) {
+      // If we have media but modal is not visible, show it
+      console.log('Effect: Setting modal visible because we have media');
+      setIsMediaViewerVisible(true);
+    } else if (!viewingMedia && isMediaViewerVisible) {
+      // If we don't have media but modal is visible, hide it
+      console.log('Effect: Hiding modal because we have no media');
+      setIsMediaViewerVisible(false);
+    }
+  }, [viewingMedia, isMediaViewerVisible]);
 
   const [replyToMessage, setReplyToMessage] = useState<UIMessage | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
@@ -238,41 +251,86 @@ export default function ChatConversationScreen() {
     } catch (e) { console.error("Reaction error:", e); Alert.alert("Error", "Reaction failed."); }
   }, [chatId, currentUser, selectedMessageForReaction]);
 
-  const handlePickMedia = useCallback(async (type: 'gallery' | 'camera') => {
-    // ... (implementation remains the same)
-    try {
-      const camPerm = await ImagePicker.requestCameraPermissionsAsync();
-      if (type === 'camera' && camPerm.status !== 'granted') {
-        Alert.alert('Permission Required', 'Camera access is needed.'); return;
-      }
-      const libPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (type === 'gallery' && libPerm.status !== 'granted') {
-        Alert.alert('Permission Required', 'Gallery access is needed.'); return;
-      }
-
-      const result = type === 'gallery' ?
-        await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.8 }) :
-        await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.8 });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
+  const { pickFromGallery, pickFromCamera } = useImagePicker({
+    onPickerSuccess: (result) => {
+      if (result.success && result.assets.length > 0) {
         const asset = result.assets[0];
         setAttachmentMenuVisible(false);
-        const normType: 'image' | 'video' = asset.type === 'video' || !!asset.uri?.toLowerCase().match(/\.(mp4|mov|avi|mkv|webm)$/i) ? 'video' : 'image';
+        
+        // Determine if it's an image or video based on mime type or file extension
+        const normType: 'image' | 'video' = 
+          asset.mime?.includes('video/') || 
+          !!asset.uri?.toLowerCase().match(/\.(mp4|mov|avi|mkv|webm)$/i) ? 'video' : 'image';
+        
+        // Create the media item for preview
         const items: MediaItemForPreview[] = [{
-          uri: asset.uri, type: normType, width: asset.width, height: asset.height,
-          duration: asset.duration ? asset.duration / 1000 : undefined,
-          fileName: asset.fileName || asset.uri.split('/').pop(),
+          uri: asset.uri, 
+          type: normType, 
+          width: asset.width, 
+          height: asset.height,
+          duration: asset.duration,
+          fileName: asset.fileName,
         }];
+        
+        // Navigate to the preview screen
         navigation.navigate('MediaPreview', {
-          mediaItems: items, chatId,
-          replyToMessage: replyToMessage ? { id: replyToMessage.id, content: replyToMessage.content, senderId: replyToMessage.senderId } : undefined
+          mediaItems: items, 
+          chatId,
+          replyToMessage: replyToMessage ? { 
+            id: replyToMessage.id, 
+            content: replyToMessage.content, 
+            senderId: replyToMessage.senderId 
+          } : undefined
         });
       }
-    } catch (e) { console.error("Pick media error:", e); Alert.alert('Error', `Could not access ${type}.`); }
-  }, [navigation, chatId, replyToMessage]);
+    },
+    onPickerError: (error) => {
+      console.error("Pick media error:", error);
+      Alert.alert('Error', 'Failed to access media. Please try again.');
+    }
+  });
+  
+  const handlePickMedia = useCallback((type: 'gallery' | 'camera') => {
+    try {
+      if (type === 'gallery') {
+        // For chat, we enable free-style cropping for more flexibility
+        pickFromGallery('chat', {
+          mediaType: 'any', // Allow both photos and videos
+          cropping: true,
+          freeStyleCropEnabled: true,
+          cropperToolbarTitle: 'Edit Image',
+          compressImageQuality: 0.8
+        });
+      } else {
+        // For camera captures, also enable cropping
+        pickFromCamera('chat', {
+          mediaType: 'any',
+          cropping: true,
+          cropperToolbarTitle: 'Edit Capture',
+          compressImageQuality: 0.8
+        });
+      }
+    } catch (e) { 
+      console.error("Pick media error:", e); 
+      Alert.alert('Error', `Could not access ${type}.`); 
+    }
+  }, [pickFromGallery, pickFromCamera, chatId, replyToMessage]);
 
   const getDisplayNameForReply = useCallback((senderId: string) => senderId === currentUser?.uid ? "You" : partnerName, [currentUser?.uid, partnerName]);
-  const handleViewMedia = useCallback((message: UIMessage) => { setViewingMedia(message); setIsMediaViewerVisible(true); }, []);
+  const handleViewMedia = useCallback((message: UIMessage) => {
+    console.log('handleViewMedia called with message ID:', message.id);
+    console.log('Current modal visibility state:', isMediaViewerVisible);
+    
+    // First set the media to ensure the modal has content when it appears
+    setViewingMedia(message);
+    console.log('Set viewing media to:', message.id);
+    
+    // Use requestAnimationFrame to ensure state update completes before showing modal
+    requestAnimationFrame(() => {
+      console.log('Setting media viewer visible in requestAnimationFrame');
+      setIsMediaViewerVisible(true);
+    });
+  }, [isMediaViewerVisible]);
   const handleCloseReactionModal = useCallback(() => {
     setReactionModalVisible(false);
     setSelectedMessageForReaction(null);
@@ -322,7 +380,7 @@ export default function ChatConversationScreen() {
         {isTestChatScreen && isTestUser() ? <CleanupButton onPress={handleCleanupTestChat} testID="cleanup-test-chat"><CleanupButtonText>Reset Chat</CleanupButtonText></CleanupButton> : <PlanDateButton onPress={() => {}}><PlanDateButtonText>Plan Date</PlanDateButtonText></PlanDateButton>}
       </HeaderContainer>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
         <MessagesContainer>
           {messages.length === 0 ?
             <EmptyContainer><EmptyText isDark={isDark}>Start a conversation with {partnerName}</EmptyText></EmptyContainer> :
@@ -366,7 +424,10 @@ export default function ChatConversationScreen() {
       <MediaViewerModal
         isVisible={isMediaViewerVisible}
         isDark={isDark}
-        onClose={() => setIsMediaViewerVisible(false)}
+        onClose={() => {
+          setIsMediaViewerVisible(false);
+          setViewingMedia(null);
+        }}
         viewingMedia={viewingMedia}
       />
     </Container>

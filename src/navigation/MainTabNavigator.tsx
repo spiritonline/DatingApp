@@ -16,6 +16,8 @@ export function MainTabNavigator() {
   return (
     <Tab.Navigator
       initialRouteName="Discover"
+      backBehavior="initialRoute"
+      // This makes screens persist when switching tabs
       screenOptions={{
         tabBarActiveTintColor: '#FF6B6B',
         tabBarInactiveTintColor: isDark ? '#888888' : '#999999',
@@ -24,7 +26,11 @@ export function MainTabNavigator() {
           borderTopColor: isDark ? '#333333' : '#EEEEEE',
         },
         headerShown: false,
+        // Handle keyboard behavior
+        tabBarHideOnKeyboard: true,
       }}
+      // This is the key property to prevent screens from unmounting
+      detachInactiveScreens={false}
     >
       <Tab.Screen
         name="Discover"

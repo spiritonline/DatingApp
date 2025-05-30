@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -9,12 +9,16 @@ import {
   Alert,
   ActivityIndicator 
 } from 'react-native';
+import { CachedImage } from '../components/CachedImage';
+import { getColorFromString, getInitials } from '../utils/avatarPlaceholder';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useAppTheme } from '../utils/useAppTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { auth, db } from '../services/firebase';
+import { auth, db, storage } from '../services/firebase';
+import { prefetchManager } from '../services/cache/prefetchManager';
 import { doc, getDoc } from '@firebase/firestore';
+import { getDownloadURL, ref } from 'firebase/storage';
 import { MainNavigationProp } from '../navigation/types';
 import styled from 'styled-components/native';
 import { ThemeProps } from '../utils/styled-components';
@@ -28,6 +32,7 @@ export default function ProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [locationConsent, setLocationConsent] = useState(false);
   const [profileVisible, setProfileVisible] = useState(true);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   
   // Fetch user profile on mount
   useEffect(() => {
@@ -43,6 +48,16 @@ export default function ProfileScreen() {
           setProfile(profileData);
           setLocationConsent(profileData.locationConsent || false);
           setProfileVisible(profileData.visible !== false); // Default to true if not set
+          
+          // Fetch profile image if available
+          if (profileData.photos && profileData.photos.length > 0) {
+            try {
+              const imageUrl = await getDownloadURL(ref(storage, profileData.photos[0]));
+              setProfileImageUrl(imageUrl);
+            } catch (error) {
+              console.error('Error loading profile image:', error);
+            }
+          }
         }
       } catch (error) {
         console.error('Error fetching user profile:', error);
@@ -130,17 +145,39 @@ export default function ProfileScreen() {
         
         {/* Profile header */}
         <ProfileHeaderContainer>
-          <ProfileAvatar>
-            <Text style={{ color: '#ffffff', fontSize: 24, fontWeight: 'bold' }}>
-              {profile?.displayName?.charAt(0) || 'U'}
-            </Text>
+          <ProfileAvatar style={{
+            backgroundColor: profile ? getColorFromString(profile.uid || '') : '#FF6B6B'
+          }}>
+            {profileImageUrl ? (
+              <CachedImage 
+                source={{ uri: profileImageUrl }} 
+                style={{ width: '100%', height: '100%' }}
+                prefetch={true}
+                priority="high"
+                showLoadingIndicator={true}
+                placeholderContent={
+                  <ProfileName isDark={false} style={{ fontSize: 32, color: '#ffffff' }}>
+                    {profile ? getInitials(profile.name || '') : '?'}
+                  </ProfileName>
+                }
+              />
+            ) : (
+              <ProfileName isDark={false} style={{ fontSize: 32, color: '#ffffff' }}>
+                {profile ? getInitials(profile.name || '') : '?'}
+              </ProfileName>
+            )}
           </ProfileAvatar>
           <ProfileName isDark={isDark}>
-            {profile?.displayName || 'User'}
+            {profile?.displayName || profile?.name || 'User'}
           </ProfileName>
+          <ProfileUid isDark={isDark}>
+            UID: {auth.currentUser?.uid || 'Not available'}
+          </ProfileUid>
           <EditProfileButton 
+            onPress={() => navigation.navigate('EditProfile')}
             accessibilityLabel="Edit profile"
             accessibilityRole="button"
+            testID="edit-profile-button"
           >
             <EditProfileText>Edit Profile</EditProfileText>
           </EditProfileButton>
@@ -273,13 +310,28 @@ const ProfileAvatar = styled.View`
   background-color: #FF6B6B;
   justify-content: center;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 15px;
+  align-self: center;
+  overflow: hidden;
 `;
+
+// We're now using CachedImage instead of the standard Image component
+// const ProfileImage = styled(Image)`
+//   width: 100%;
+//   height: 100%;
+//   border-radius: 50px;
+// `;
 
 const ProfileName = styled.Text<ThemeProps>`
   font-size: 24px;
   font-weight: bold;
   color: ${(props: ThemeProps) => props.isDark ? '#ffffff' : '#000000'};
+  margin-bottom: 4px;
+`;
+
+const ProfileUid = styled.Text<ThemeProps>`
+  font-size: 12px;
+  color: ${(props: ThemeProps) => props.isDark ? '#888888' : '#666666'};
   margin-bottom: 8px;
 `;
 

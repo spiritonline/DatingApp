@@ -28,6 +28,8 @@ export type AuthStackParamList = {
     initialIndex?: number;
   };
   DebugImageViewer: undefined;
+  EditProfile: undefined;
+  ImagePickerTest: undefined;
 };
 
 // Main tab navigation parameter list

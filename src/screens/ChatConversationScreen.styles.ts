@@ -127,6 +127,7 @@ export const MessageContainer = styled.View<MessageComponentProps>`
 
 export const MessageBubble = styled.View<MessageComponentProps>`
   max-width: 80%;
+  min-width: 40%;
   padding: 12px 16px;
   border-radius: 20px;
   background-color: ${(props: MessageComponentProps) =>
@@ -134,19 +135,24 @@ export const MessageBubble = styled.View<MessageComponentProps>`
     props.isCurrentUser
       ? '#FF6B6B'
       : props.isDark ? '#2C2C2C' : '#F0F0F0'};
+  overflow: hidden;
 `;
 
 export const StyledImage = styled(Image)<MessageComponentProps>`
-  width: 200px;
-  height: 150px;
+  width: 100%;
+  max-width: 250px;
+  height: 200px;
   border-radius: 10px;
+  resize-mode: cover;
   margin-bottom: ${(props: MessageComponentProps) => (props.isCurrentUser || props.isDark) ? '4px' : '0px'};
 `;
 
 export const VideoPreviewContainer = styled.View<MessageComponentProps>`
-  width: 200px;
-  height: 150px;
+  width: 100%;
+  max-width: 250px;
+  height: 200px;
   border-radius: 10px;
+  overflow: hidden;
   justify-content: center;
   align-items: center;
   background-color: ${(props: MessageComponentProps) => props.isDark ? '#333' : '#e0e0e0'};

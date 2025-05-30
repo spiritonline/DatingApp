@@ -2,6 +2,7 @@
 import { collection, doc, getDoc, setDoc, query, where, getDocs, orderBy, addDoc, serverTimestamp, updateDoc, onSnapshot, writeBatch, Timestamp } from '@firebase/firestore';
 import { db, auth } from './firebase';
 import { ChatServiceMessage, ChatPreview, GalleryMediaItem } from '../types/chat';
+import { getUserProfile } from './profileService';
 
 const TEST_USER_1_UID = 'dqrwMcXBVwTYqYBhdcZDNApIu6l1';
 const TEST_USER_2_UID = 'gxCPvaE154aQ6VE1yESLD6dloTy1';
@@ -76,28 +77,58 @@ export async function getUserChats(): Promise<ChatPreview[]> {
     const chatsSnapshot = await getDocs(userChatsQuery);
 
     const chats: ChatPreview[] = [];
-    chatsSnapshot.forEach((chatDoc) => {
+    
+    // Process each chat in parallel
+    await Promise.all(chatsSnapshot.docs.map(async (chatDoc) => {
       const chatData = chatDoc.data();
+      const participantIds = chatData.participantIds || [];
+      const otherParticipantId = participantIds.find((id: string) => id !== currentUserId);
+      
+      // Get the other participant's profile
+      let participantName = 'Unknown User';
+      if (otherParticipantId) {
+        try {
+          const profile = await getUserProfile(otherParticipantId);
+          participantName = profile?.displayName || profile?.name || otherParticipantId.substring(0, 8);
+        } catch (error) {
+          console.error(`Error fetching profile for user ${otherParticipantId}:`, error);
+        }
+      }
+      
+      // For test chats, ensure we have a clear indicator
+      const isTestChat = chatData.isTestChat || false;
+      const displayName = isTestChat ? `${participantName} (Test)` : participantName;
+      
       chats.push({
         id: chatDoc.id,
-        participantIds: chatData.participantIds || [],
-        participantNames: chatData.participantNames || {},
+        participantIds,
+        participantNames: {
+          ...chatData.participantNames,
+          [otherParticipantId || '']: displayName
+        },
         lastMessage: chatData.lastMessage,
-        isTestChat: chatData.isTestChat || false,
+        isTestChat,
         unreadCount: chatData.unreadCount,
       });
-    });
+    }));
 
+    // If this is a test user and test chat doesn't exist, initialize it
     if (isTestUser() && !chats.some(chat => chat.id === TEST_CHAT_ID)) {
       const initializedTestChatId = await initializeTestChat();
       if (initializedTestChatId) {
-          const testChatDoc = await getDoc(doc(db, 'chats', TEST_CHAT_ID));
-          if (testChatDoc.exists()) {
-            const testChatData = testChatDoc.data();
-            chats.push({
-              id: TEST_CHAT_ID,
-              participantIds: testChatData.participantIds || [],
-              participantNames: testChatData.participantNames || {},
+        const testChatDoc = await getDoc(doc(db, 'chats', TEST_CHAT_ID));
+        if (testChatDoc.exists()) {
+          const testChatData = testChatDoc.data();
+          const otherTestUserId = getOtherTestUserId();
+          const otherTestUserName = otherTestUserId ? TEST_USER_DISPLAY_NAMES[otherTestUserId] : 'Test User';
+          
+          chats.push({
+            id: TEST_CHAT_ID,
+            participantIds: testChatData.participantIds || [],
+            participantNames: {
+              ...testChatData.participantNames,
+              [otherTestUserId || '']: `${otherTestUserName} (Test)`
+            },
               lastMessage: testChatData.lastMessage,
               isTestChat: true,
               unreadCount: testChatData.unreadCount,

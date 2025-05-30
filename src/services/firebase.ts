@@ -4,17 +4,26 @@ import { initializeApp, getApps, getApp } from '@firebase/app';
 import { initializeAuth, getReactNativePersistence } from '@firebase/auth';
 import { getFirestore } from '@firebase/firestore';
 import { getStorage, connectStorageEmulator } from '@firebase/storage';
+import {
+  FIREBASE_API_KEY,
+  FIREBASE_AUTH_DOMAIN,
+  FIREBASE_PROJECT_ID,
+  FIREBASE_STORAGE_BUCKET,
+  FIREBASE_MESSAGING_SENDER_ID,
+  FIREBASE_APP_ID,
+  FIREBASE_MEASUREMENT_ID
+} from '@env';
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "datingappbackend-2c3d7.firebaseapp.com",
-  projectId: "datingappbackend-2c3d7",
-  storageBucket: "datingappbackend-2c3d7.firebasestorage.app",
-  messagingSenderId: "37726804970",
-  appId: "1:37726804970:web:fa0555dce9e97bcce5b093",
-  measurementId: "G-HGJQB6W6P3"
+  apiKey: FIREBASE_API_KEY,
+  authDomain: FIREBASE_AUTH_DOMAIN,
+  projectId: FIREBASE_PROJECT_ID,
+  storageBucket: FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: FIREBASE_MESSAGING_SENDER_ID,
+  appId: FIREBASE_APP_ID,
+  measurementId: FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase with singleton pattern to prevent duplicate app initialization

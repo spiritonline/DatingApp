@@ -2,18 +2,80 @@ import { collection, doc, getDoc, setDoc, query, where, getDocs, orderBy, addDoc
 import { db, auth } from './firebase';
 // Import types from the new central location
 import { ChatServiceMessage, ChatPreview as ServiceChatPreviewType, GalleryMediaItem } from '../types/chat'; // Renamed ChatPreview to avoid conflict
+import { getUserProfile } from './profileService';
 
 // Test user UIDs
 const TEST_USER_1_UID = 'dqrwMcXBVwTYqYBhdcZDNApIu6l1';
 const TEST_USER_2_UID = 'gxCPvaE154aQ6VE1yESLD6dloTy1';
-const TEST_USER_DISPLAY_NAMES: Record<string, string> = {
-  [TEST_USER_1_UID]: 'Test User 1',
-  [TEST_USER_2_UID]: 'Test User 2',
-};
 const TEST_CHAT_ID = `testChat_${[TEST_USER_1_UID, TEST_USER_2_UID].sort().join('_')}`;
+
+// Cache for user display names
+const userDisplayNames: Record<string, string> = {};
+
+/**
+ * Fetches user display names from Firestore
+ * @param userIds Array of user IDs to fetch names for
+ */
+async function fetchUserDisplayNames(userIds: string[]): Promise<Record<string, string>> {
+  const names: Record<string, string> = {};
+  const userIdsToFetch = userIds.filter(id => !userDisplayNames[id]);
+
+  if (userIdsToFetch.length === 0) {
+    return {};
+  }
+
+  try {
+    // Fetch user profiles in batch
+    const profilesQuery = query(
+      collection(db, 'profiles'),
+      where('uid', 'in', userIdsToFetch)
+    );
+    
+    const querySnapshot = await getDocs(profilesQuery);
+    
+    querySnapshot.forEach(doc => {
+      const userData = doc.data();
+      const uid = userData.uid;
+      const displayName = userData.displayName || userData.name || 'Unknown User';
+      names[uid] = displayName;
+      userDisplayNames[uid] = displayName; // Cache the result
+    });
+  } catch (error) {
+    console.error('Error fetching user display names:', error);
+  }
+
+  return names;
+}
+
+/**
+ * Gets display name for a user, either from cache or Firestore
+ * @param userId User ID to get name for
+ * @returns Display name or 'Unknown User' if not found
+ */
+export async function getUserDisplayName(userId: string): Promise<string> {
+  if (!userId) return 'Unknown User';
+  
+  // Check cache first
+  if (userDisplayNames[userId]) {
+    return userDisplayNames[userId];
+  }
+
+  // Fetch from Firestore if not in cache
+  try {
+    const userProfile = await getUserProfile(userId);
+    const displayName = userProfile?.displayName || userProfile?.name || 'Unknown User';
+    userDisplayNames[userId] = displayName; // Cache the result
+    return displayName;
+  } catch (error) {
+    console.error(`Error fetching display name for user ${userId}:`, error);
+    return 'Unknown User';
+  }
+}
 
 // Re-export types for consumers of this service
 export type { ChatServiceMessage, ServiceChatPreviewType, GalleryMediaItem };
+
+// getUserDisplayName is already exported at its declaration above
 
 export function isTestUser(): boolean {
   const currentUserId = auth.currentUser?.uid;
@@ -40,22 +102,39 @@ export async function initializeTestChat(): Promise<string | null> {
     const chatDocSnap = await getDoc(chatDocRef);
 
     if (!chatDocSnap.exists()) {
+      // Get display names for test users
+      const participantIds = [TEST_USER_1_UID, TEST_USER_2_UID];
+      const participantNames = {} as Record<string, string>;
+      
+      // Fetch display names for both test users
+      await Promise.all(participantIds.map(async (uid) => {
+        participantNames[uid] = await getUserDisplayName(uid);
+      }));
+
       await setDoc(chatDocRef, {
-        participantIds: [TEST_USER_1_UID, TEST_USER_2_UID],
-        participantNames: TEST_USER_DISPLAY_NAMES,
+        participantIds,
+        participantNames,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         isTestChat: true,
       });
 
       const messagesRef = collection(db, `chats/${TEST_CHAT_ID}/messages`);
-      const initialMessage: Partial<ChatServiceMessage> = { // Use Partial for initial system message
+      // Get display names for the initial message
+      const userName1 = await getUserDisplayName(TEST_USER_1_UID);
+      const userName2 = await getUserDisplayName(TEST_USER_2_UID);
+      
+      const initialMessage: Partial<ChatServiceMessage> = {
         senderId: 'system',
-        content: '🧪 This is a test conversation between Test User 1 and Test User 2',
+        content: `🧪 This is a test conversation between ${userName1} and ${userName2}`,
         type: 'text',
-        createdAt: serverTimestamp() as Timestamp, // Cast for serverTimestamp
+        createdAt: serverTimestamp() as Timestamp,
         status: 'sent',
       };
+      
+      // Pre-fetch display names for the chat participants
+      await fetchUserDisplayNames([TEST_USER_1_UID, TEST_USER_2_UID]);
+      
       await addDoc(messagesRef, initialMessage);
       console.log('Test chat initialized successfully');
     } else {
@@ -78,16 +157,47 @@ export async function getUserChats(): Promise<ServiceChatPreviewType[]> {
     const chatsSnapshot = await getDocs(userChatsQuery);
 
     const chats: ServiceChatPreviewType[] = [];
-    chatsSnapshot.forEach((chatDoc) => {
-      const chatData = chatDoc.data();
+    // First collect all participant IDs to fetch their display names in batch
+    const allParticipantIds = new Set<string>();
+    const chatsData = chatsSnapshot.docs.map(chatDoc => {
+      const chatData = chatDoc.data() as {
+        participantIds?: string[];
+        participantNames?: Record<string, string>;
+        lastMessage?: any;
+        isTestChat?: boolean;
+      };
+      chatData.participantIds?.forEach((id: string) => allParticipantIds.add(id));
+      return { 
+        id: chatDoc.id, 
+        participantIds: chatData.participantIds || [],
+        participantNames: chatData.participantNames || {},
+        lastMessage: chatData.lastMessage,
+        isTestChat: chatData.isTestChat || false
+      };
+    });
+
+    // Fetch all display names in a single batch
+    if (allParticipantIds.size > 0) {
+      await fetchUserDisplayNames(Array.from(allParticipantIds));
+    }
+
+    // Now create chat objects with the fetched display names
+    for (const chatData of chatsData) {
+      const participantNames = {} as Record<string, string>;
+      
+      // Get display names from cache
+      for (const uid of chatData.participantIds || []) {
+        participantNames[uid] = userDisplayNames[uid] || 'Unknown User';
+      }
+      
       chats.push({
-        id: chatDoc.id,
+        id: chatData.id,
         participantIds: chatData.participantIds,
-        participantNames: chatData.participantNames,
-        lastMessage: chatData.lastMessage, // Assuming lastMessage structure matches
+        participantNames,
+        lastMessage: chatData.lastMessage,
         isTestChat: chatData.isTestChat || false,
       });
-    });
+    }
 
     if (isTestUser() && !chats.some(chat => chat.id === TEST_CHAT_ID)) {
       const initializedTestChatId = await initializeTestChat(); // Ensure it's initialized
@@ -95,10 +205,18 @@ export async function getUserChats(): Promise<ServiceChatPreviewType[]> {
           const testChatDoc = await getDoc(doc(db, 'chats', TEST_CHAT_ID));
           if (testChatDoc.exists()) {
             const testChatData = testChatDoc.data();
+            const participantNames = {} as Record<string, string>;
+            
+            // Ensure we have display names for test chat participants
+            const participantIds = testChatData.participantIds || [];
+            await Promise.all(participantIds.map(async (uid: string) => {
+              participantNames[uid] = await getUserDisplayName(uid);
+            }));
+            
             chats.push({
               id: TEST_CHAT_ID,
-              participantIds: testChatData.participantIds,
-              participantNames: testChatData.participantNames,
+              participantIds,
+              participantNames,
               lastMessage: testChatData.lastMessage,
               isTestChat: true,
             });
