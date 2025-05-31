@@ -7,6 +7,7 @@ import { AuthNavigationProp } from '../navigation/types';
 import styled from 'styled-components/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AuthHeader from '../components/auth-components/AuthHeader';
+import { validateEmail, validatePassword } from '../utils/validation';
 
 export default function SignUpScreen() {
   const colorScheme = useColorScheme();
@@ -35,22 +36,29 @@ export default function SignUpScreen() {
       terms: '',
     };
 
-    // Email validation
+    // Email validation with comprehensive checks
     if (!email) {
       newErrors.email = 'Email is required';
       isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Email is invalid';
+    } else if (!validateEmail(email)) {
+      newErrors.email = 'Please enter a valid email address';
       isValid = false;
     }
 
-    // Password validation
+    // Password validation with strength checking
     if (!password) {
       newErrors.password = 'Password is required';
       isValid = false;
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-      isValid = false;
+    } else {
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.valid) {
+        newErrors.password = passwordValidation.suggestions[0] || 'Password is invalid';
+        isValid = false;
+      } else if (passwordValidation.strength === 'weak') {
+        // Show suggestions for weak passwords
+        newErrors.password = 'Weak password: ' + passwordValidation.suggestions.join(', ');
+        isValid = false;
+      }
     }
 
     // Confirm password validation

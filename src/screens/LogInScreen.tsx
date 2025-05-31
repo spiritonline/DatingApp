@@ -9,6 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AuthHeader from '../components/auth-components/AuthHeader';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserProfile, isProfileComplete } from '../services/profileService';
+import { validateEmail } from '../utils/validation';
+import { enforceRateLimit, RateLimitConfigs } from '../utils/rateLimiter';
 
 export default function LogInScreen() {
   const colorScheme = useColorScheme();
@@ -63,12 +65,12 @@ export default function LogInScreen() {
       password: '',
     };
 
-    // Email validation
+    // Email validation with comprehensive checks
     if (!email) {
       newErrors.email = 'Email is required';
       isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Email is invalid';
+    } else if (!validateEmail(email)) {
+      newErrors.email = 'Please enter a valid email address';
       isValid = false;
     }
 
@@ -84,6 +86,14 @@ export default function LogInScreen() {
 
   const handleLogIn = async () => {
     if (!validateForm()) return;
+    
+    try {
+      // Enforce rate limiting for login attempts
+      enforceRateLimit(RateLimitConfigs.LOGIN_ATTEMPT(email));
+    } catch (error: any) {
+      Alert.alert('Too Many Attempts', error.message);
+      return;
+    }
 
     setIsLoading(true);
     try {

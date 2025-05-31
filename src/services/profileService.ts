@@ -6,6 +6,10 @@ import {
   updateDoc, 
   serverTimestamp 
 } from '@firebase/firestore';
+import { profileCache } from './cache/profileCache';
+import { offlineStorage } from './cache/offlineStorage';
+import { handleServiceError, logError, createValidationError, retryOperation } from '../utils/errorHandler';
+import { enforceRateLimit, RateLimitConfigs } from '../utils/rateLimiter';
 
 // User profile interface
 export interface UserProfile {
@@ -81,20 +85,58 @@ export const createUserProfile = async (uid: string): Promise<UserProfile> => {
  * @returns Promise with the user profile or null if not found
  */
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
+  if (!uid) {
+    throw createValidationError('uid', 'User ID is required');
+  }
+  
   try {
+    // Check cache first
+    const cached = await profileCache.get(uid);
+    if (cached) {
+      return cached;
+    }
+    
+    // Check offline storage if not in memory cache
+    const offlineCached = await offlineStorage.getCachedData<UserProfile>(
+      `profile:${uid}`,
+      24 * 60 * 60 * 1000 // 24 hours max age for offline profiles
+    );
+    
+    if (offlineCached) {
+      // Update memory cache with offline data
+      await profileCache.set(uid, offlineCached, false);
+      return offlineCached;
+    }
+    
+    // Fetch from Firestore with retry
     const userProfileRef = doc(db, 'profiles', uid);
-    const userProfileSnap = await getDoc(userProfileRef);
+    const userProfileSnap = await retryOperation(
+      () => getDoc(userProfileRef),
+      { maxAttempts: 2 }
+    );
     
     if (userProfileSnap.exists()) {
-      return userProfileSnap.data() as UserProfile;
+      const profile = userProfileSnap.data() as UserProfile;
+      
+      // Update caches
+      await profileCache.set(uid, profile);
+      await offlineStorage.cacheData(`profile:${uid}`, profile);
+      
+      return profile;
     }
     
     return null;
   } catch (error) {
-    if (__DEV__) {
-      console.error('Error getting user profile:', error);
+    const appError = handleServiceError(error);
+    logError(appError, { operation: 'getUserProfile', uid });
+    
+    // Try offline storage as last resort on error
+    const fallback = await offlineStorage.getCachedData<UserProfile>(`profile:${uid}`);
+    if (fallback) {
+      return fallback;
     }
-    throw new Error('Failed to get user profile');
+    
+    throw appError;
   }
 };
 
@@ -108,6 +150,9 @@ export const updateUserProfile = async (
   uid: string, 
   data: Partial<UserProfile>
 ): Promise<void> => {
+  // Enforce rate limiting for profile updates
+  enforceRateLimit(RateLimitConfigs.PROFILE_UPDATE(uid));
+  
   try {
     const userProfileRef = doc(db, 'profiles', uid);
     

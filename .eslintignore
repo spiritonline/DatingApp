@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+ios/Pods/
+
+# Build outputs
+build/
+dist/
+.expo/
+web-build/
+coverage/
+
+# Android
+android/build/
+android/app/build/
+android/.gradle/
+
+# iOS
+ios/build/
+
+# Metro
+.metro-health-check*
+
+# Testing
+__tests__/
+e2e/
+
+# Misc
+*.log
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Generated files
+*.generated.*

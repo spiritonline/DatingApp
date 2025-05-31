@@ -35,6 +35,8 @@ import { CachedImage } from '../components/CachedImage';
 import { prefetchManager } from '../services/cache/prefetchManager';
 import { AnimatedLikeButton } from '../components/AnimatedLikeButton';
 import { createLike, createDislike } from '../services/likesService';
+import { trackScreenLoad, trackInteraction } from '../services/analytics/performanceMonitor';
+import RateLimitDisplay from '../components/RateLimitDisplay';
 
 // Create a new QueryClient instance
 const queryClient = new QueryClient();
@@ -104,6 +106,18 @@ function DiscoverScreen() {
   
   // Track prefetched URIs to avoid duplicates
   const prefetchedUris = useRef<Set<string>>(new Set());
+  const screenLoadStartTime = useRef<number>(Date.now());
+  
+  // Track screen load performance
+  useEffect(() => {
+    const loadEndTime = Date.now();
+    const loadTime = loadEndTime - screenLoadStartTime.current;
+    
+    trackScreenLoad('DiscoverScreen', loadTime, {
+      profileCount: profiles.length,
+      imageCount: profiles.reduce((sum, p) => sum + (p.photos?.length || 0), 0),
+    });
+  }, [profiles.length]);
   
   // On mount, fetch today's like count
   useEffect(() => {
@@ -227,9 +241,17 @@ function DiscoverScreen() {
   const handleDismiss = async () => {
     if (!currentProfile || !currentUid) return;
     
+    const interactionStart = Date.now();
+    
     try {
       // Record the dislike in Firebase
       await createDislike(currentUid, currentProfile.id);
+      
+      // Track interaction performance
+      trackInteraction('dismiss_profile', Date.now() - interactionStart, {
+        profileId: currentProfile.id,
+      });
+      
       // Move to next profile
       goToNextProfile();
     } catch (error) {
@@ -243,6 +265,8 @@ function DiscoverScreen() {
   const handleLike = async () => {
     if (!currentProfile || !currentUid) return;
     
+    const interactionStart = Date.now();
+    
     // Check if we need to show text modal based on like count
     const likeRequirement = todayLikeCount === 0 ? 'none' : 
                            todayLikeCount === 1 ? 'text' : 
@@ -252,6 +276,13 @@ function DiscoverScreen() {
       // Direct like without additional requirements
       try {
         await createLike(currentUid, currentProfile.id);
+        
+        // Track interaction performance
+        trackInteraction('like_profile', Date.now() - interactionStart, {
+          profileId: currentProfile.id,
+          requirementType: 'none',
+        });
+        
         // Update Redux store for like count
         dispatch(fetchTodayLikes(currentUid) as any);
         // Move to next profile after animation
@@ -410,30 +441,39 @@ function DiscoverScreen() {
       
       {/* Fixed footer with action buttons */}
       <FooterContainer isDark={isDark}>
-        <ActionButton 
-          onPress={handleDismiss}
-          testID="dismiss-button"
-          accessibilityLabel="Dismiss profile"
-          accessibilityRole="button"
-        >
-          <ActionButtonText>✕</ActionButtonText>
-        </ActionButton>
-        
-        <AnimatedLikeButton 
-          onPress={handleLike}
-          testID="like-button"
-          size={64}
-        />
-        
-        {/* Optional Super Like button (placeholder) */}
-        <ActionButton 
-          onPress={() => Alert.alert('Super Like', 'This feature is coming soon!')}
-          accessibilityLabel="Super like profile"
-          accessibilityRole="button"
-          secondary
-        >
-          <ActionButtonText>★</ActionButtonText>
-        </ActionButton>
+        <View style={{ width: '100%', alignItems: 'center' }}>
+          <RateLimitDisplay 
+            userId={currentUid}
+            actionType="like"
+            isDark={isDark}
+          />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%' }}>
+            <ActionButton 
+              onPress={handleDismiss}
+              testID="dismiss-button"
+              accessibilityLabel="Dismiss profile"
+              accessibilityRole="button"
+            >
+              <ActionButtonText>✕</ActionButtonText>
+            </ActionButton>
+            
+            <AnimatedLikeButton 
+              onPress={handleLike}
+              testID="like-button"
+              size={64}
+            />
+            
+            {/* Optional Super Like button (placeholder) */}
+            <ActionButton 
+              onPress={() => Alert.alert('Super Like', 'This feature is coming soon!')}
+              accessibilityLabel="Super like profile"
+              accessibilityRole="button"
+              secondary
+            >
+              <ActionButtonText>★</ActionButtonText>
+            </ActionButton>
+          </View>
+        </View>
       </FooterContainer>
       
       {/* Text like modal */}

@@ -16,6 +16,7 @@ import { AuthNavigationProp } from '../../navigation/types';
 import styled from 'styled-components/native';
 import { ThemeProps } from '../../utils/styled-components';
 import { validatePersonalInfo, PersonalInfoData, PersonalInfoErrors } from './utils/validation';
+import { sanitizeInput } from '../../utils/validation';
 
 // Using types from our validation utility
 
@@ -58,15 +59,18 @@ export default function PersonalInfoScreen() {
         return;
       }
 
+      // Sanitize data before saving
+      const sanitizedName = sanitizeInput(formData.name);
+      
       // Save to Firestore with BOTH naming conventions for maximum compatibility
       // This ensures that both the old and new code will recognize the fields
       await updateUserProfile(userId, {
         // New field names (preferred)
-        displayName: formData.name,
+        displayName: sanitizedName,
         birthdate: formData.age,
         
         // Legacy field names (for backward compatibility)
-        name: formData.name,
+        name: sanitizedName,
         age: parseInt(formData.age, 10),
         
         // Common fields

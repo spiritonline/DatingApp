@@ -16,6 +16,14 @@ import {
 } from 'firebase/firestore';
 import { Like, Match, LikeWithProfile, UserProfile } from '../types';
 import { getUserProfile, UserProfile as ServiceUserProfile } from './profileService';
+import { 
+  AppError, 
+  handleServiceError, 
+  createValidationError,
+  logError,
+  retryOperation 
+} from '../utils/errorHandler';
+import { enforceRateLimit, RateLimitConfigs } from '../utils/rateLimiter';
 
 // Convert service UserProfile to types UserProfile
 const convertProfile = (serviceProfile: ServiceUserProfile): UserProfile => {
@@ -44,6 +52,18 @@ const convertProfile = (serviceProfile: ServiceUserProfile): UserProfile => {
  * @returns Promise with the created like
  */
 export const createLike = async (fromUserId: string, toUserId: string): Promise<Like> => {
+  // Validate inputs
+  if (!fromUserId || !toUserId) {
+    throw createValidationError('userId', 'User IDs are required');
+  }
+  
+  if (fromUserId === toUserId) {
+    throw createValidationError('userId', 'Cannot like yourself');
+  }
+  
+  // Enforce rate limiting for likes
+  enforceRateLimit(RateLimitConfigs.LIKE_ACTION(fromUserId));
+  
   try {
     const likeId = `${fromUserId}_${toUserId}`;
     const likeRef = doc(db, 'likes', likeId);
@@ -56,17 +76,19 @@ export const createLike = async (fromUserId: string, toUserId: string): Promise<
       status: 'pending'
     };
     
-    await setDoc(likeRef, likeData);
+    await retryOperation(
+      () => setDoc(likeRef, likeData),
+      { maxAttempts: 2 }
+    );
     
     return {
       ...likeData,
       createdAt: new Date()
     } as Like;
   } catch (error) {
-    if (__DEV__) {
-      console.error('Error creating like:', error);
-    }
-    throw new Error('Failed to create like');
+    const appError = handleServiceError(error);
+    logError(appError, { fromUserId, toUserId });
+    throw appError;
   }
 };
 
@@ -76,6 +98,10 @@ export const createLike = async (fromUserId: string, toUserId: string): Promise<
  * @returns Promise with array of likes with user profiles
  */
 export const getLikesReceived = async (userId: string): Promise<LikeWithProfile[]> => {
+  if (!userId) {
+    throw createValidationError('userId', 'User ID is required');
+  }
+  
   try {
     // Try the optimized query first
     const likesQuery = query(
@@ -90,7 +116,9 @@ export const getLikesReceived = async (userId: string): Promise<LikeWithProfile[
       likesSnap = await getDocs(likesQuery);
     } catch (indexError: any) {
       // If index is not ready, fall back to simpler query
-      console.warn('Index not ready, using fallback query:', indexError.message);
+      if (__DEV__) {
+        console.warn('Index not ready, using fallback query:', indexError.message);
+      }
       const fallbackQuery = query(
         collection(db, 'likes'),
         where('toUserId', '==', userId)
@@ -126,10 +154,9 @@ export const getLikesReceived = async (userId: string): Promise<LikeWithProfile[
       return dateB.getTime() - dateA.getTime();
     });
   } catch (error) {
-    if (__DEV__) {
-      console.error('Error getting likes received:', error);
-    }
-    throw new Error('Failed to get likes received');
+    const appError = handleServiceError(error);
+    logError(appError, { userId });
+    throw appError;
   }
 };
 
@@ -330,6 +357,9 @@ export const getUserMatches = async (userId: string): Promise<Match[]> => {
  * @returns Promise
  */
 export const createDislike = async (fromUserId: string, toUserId: string): Promise<void> => {
+  // Enforce rate limiting for likes/dislikes (using same limit)
+  enforceRateLimit(RateLimitConfigs.LIKE_ACTION(fromUserId));
+  
   try {
     const dislikeId = `${fromUserId}_${toUserId}`;
     const dislikeRef = doc(db, 'dislikes', dislikeId);

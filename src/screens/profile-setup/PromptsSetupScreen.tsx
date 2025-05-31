@@ -20,6 +20,7 @@ import { AuthNavigationProp } from '../../navigation/types';
 import styled from 'styled-components/native';
 import { ThemeProps, ButtonProps } from '../../utils/styled-components';
 import { validatePromptAnswers, PromptAnswer, SimpleValidationResult } from './utils/validation';
+import { sanitizeInput } from '../../utils/validation';
 import { useAudioRecording } from '../../hooks/useAudioRecording';
 import { PROMPTS, Prompt } from '../../constants/prompts';
 import AddPromptForm from '../../components/profile-setup/AddPromptForm';
@@ -217,14 +218,14 @@ export default function PromptsSetupScreen() {
         return;
       }
 
-      // Format the prompts data for storage
+      // Format and sanitize the prompts data for storage
       const promptsData = promptAnswers.map(answer => {
         const prompt = PROMPTS.find(p => p.id === answer.promptId);
         return {
           id: answer.id,
           promptId: answer.promptId,
           promptText: prompt ? prompt.text : answer.promptText,
-          answer: answer.answer || '',
+          answer: sanitizeInput(answer.answer || ''),
           voiceNoteUrl: answer.voiceNoteUrl || '',
         };
       });

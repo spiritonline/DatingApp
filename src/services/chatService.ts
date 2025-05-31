@@ -3,6 +3,9 @@ import { collection, doc, getDoc, setDoc, query, where, getDocs, orderBy, addDoc
 import { db, auth } from './firebase';
 import { ChatServiceMessage, ChatPreview, GalleryMediaItem } from '../types/chat';
 import { getUserProfile } from './profileService';
+import { validateMessage } from '../utils/validation';
+import { enforceRateLimit, RateLimitConfigs } from '../utils/rateLimiter';
+import { logTimestampDetails } from '../utils/debugTimestamps';
 
 // Jake Martinez - the default chat partner for all users
 const JAKE_MARTINEZ_UID = 'Iq8dtHo0rnSbQsbos2bzVfapHp42';
@@ -69,12 +72,13 @@ export async function initializeJakeChat(): Promise<string | null> {
 
       // Add a welcome message from Jake
       const messagesRef = collection(db, `chats/${chatId}/messages`);
-      const welcomeMessage: Partial<ChatServiceMessage> = {
+      const welcomeMessage = {
         senderId: JAKE_MARTINEZ_UID,
         content: '👋 Hey there! Welcome to the app. Feel free to message me anytime!',
         type: 'text',
-        createdAt: serverTimestamp() as Timestamp,
+        createdAt: serverTimestamp(),
         status: 'sent',
+        readBy: [],
       };
       await addDoc(messagesRef, welcomeMessage);
       
@@ -221,14 +225,43 @@ export async function sendMessage(
       console.error('[chatService] Missing user ID or chat ID for sendMessage');
       return false;
     }
+    
+    // Enforce rate limiting for messages
+    enforceRateLimit(RateLimitConfigs.SEND_MESSAGE(currentUserId));
 
     if ((messageData.type === 'image' || messageData.type === 'video' || messageData.type === 'audio') && !messageData.mediaUrl) {
       console.error('[chatService] Media message missing mediaUrl:', messageData);
       return false;
     }
-    if (messageData.type === 'text' && (!messageData.content || !messageData.content.trim())) {
-      console.error('[chatService] Text message has invalid content:', messageData);
-      return false;
+    
+    // Validate and sanitize text messages
+    if (messageData.type === 'text') {
+      const validation = validateMessage(messageData.content || '');
+      if (!validation.valid) {
+        console.error('[chatService] Invalid message content:', validation.error);
+        return false;
+      }
+      messageData.content = validation.sanitized;
+    }
+    
+    // Validate and sanitize captions
+    if (messageData.caption) {
+      const captionValidation = validateMessage(messageData.caption);
+      if (!captionValidation.valid) {
+        console.error('[chatService] Invalid caption:', captionValidation.error);
+        return false;
+      }
+      messageData.caption = captionValidation.sanitized;
+    }
+    
+    // Validate and sanitize gallery captions
+    if (messageData.galleryCaption) {
+      const galleryCaptionValidation = validateMessage(messageData.galleryCaption);
+      if (!galleryCaptionValidation.valid) {
+        console.error('[chatService] Invalid gallery caption:', galleryCaptionValidation.error);
+        return false;
+      }
+      messageData.galleryCaption = galleryCaptionValidation.sanitized;
     }
 
     const messagesRef = collection(db, `chats/${chatId}/messages`);
@@ -239,7 +272,7 @@ export async function sendMessage(
       content: messageData.content || '',
       type: messageData.type,
       createdAt: serverTimestamp(),
-      status: 'sending',
+      status: 'sent', // Set to 'sent' immediately to avoid update operation
       readBy: [],
     };
 
@@ -260,7 +293,7 @@ export async function sendMessage(
     const typedFinalMessageData = dataForFirestore as Omit<ChatServiceMessage, 'id'>;
 
     const messageDocRef = await addDoc(messagesRef, typedFinalMessageData);
-    await updateDoc(messageDocRef, { status: 'sent' });
+    // No need to update status separately since we set it to 'sent' directly
 
     const lastMessageUpdate: ChatPreview['lastMessage'] = {
       content: typedFinalMessageData.content,
@@ -297,14 +330,25 @@ export function subscribeToMessages(
     const messages: ChatServiceMessage[] = snapshot.docs.map(docSnap => {
       const data = docSnap.data();
       
-      // *** ADDED SAFETY CHECK FOR createdAt ***
+      // *** IMPROVED SAFETY CHECK FOR createdAt ***
       let createdAtValue: Timestamp;
-      if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+      
+      if (data.createdAt && data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+        // Valid Firestore Timestamp
         createdAtValue = data.createdAt as Timestamp;
+      } else if (data.createdAt && data.createdAt.seconds && data.createdAt.nanoseconds !== undefined) {
+        // Handle serverTimestamp() placeholder that might not have toDate method yet
+        createdAtValue = new Timestamp(data.createdAt.seconds, data.createdAt.nanoseconds);
+      } else if (data.createdAt && typeof data.createdAt === 'object' && data.createdAt._seconds) {
+        // Handle alternative timestamp format
+        createdAtValue = new Timestamp(data.createdAt._seconds, data.createdAt._nanoseconds || 0);
       } else {
-        // Fallback if createdAt is missing, null, or not a Firestore Timestamp
-        console.warn(`Message ${docSnap.id} has invalid or missing createdAt. Using current server time as fallback.`);
-        createdAtValue = Timestamp.now(); // Or handle as an error, or use a placeholder
+        // Fallback if createdAt is completely missing or invalid
+        if (__DEV__) {
+          console.warn(`Message ${docSnap.id} has invalid or missing createdAt. Using current time as fallback.`);
+          logTimestampDetails(data.createdAt, docSnap.id);
+        }
+        createdAtValue = Timestamp.now();
       }
 
       return {
@@ -326,7 +370,15 @@ export function subscribeToMessages(
         status: data.status || 'sent',
       } as ChatServiceMessage;
     });
-    callback(messages);
+    
+    // Sort messages by createdAt to ensure proper ordering even if some timestamps were fixed
+    const sortedMessages = messages.sort((a, b) => {
+      const timeA = a.createdAt.toDate().getTime();
+      const timeB = b.createdAt.toDate().getTime();
+      return timeA - timeB;
+    });
+    
+    callback(sortedMessages);
   }, (error) => {
     console.error(`Error listening to messages for chat ${chatId}:`, error);
     callback([]);

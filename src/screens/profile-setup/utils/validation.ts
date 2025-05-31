@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { sanitizeInput, filterProfanity } from '../../../utils/validation';
+
 // Define TypeScript interfaces for our validation functions
 
 export interface PersonalInfoData {
@@ -52,10 +55,21 @@ export function validatePersonalInfo(data: PersonalInfoData): ValidationResult<P
   
   let isValid = true;
 
-  // Name validation
-  if (!data.name.trim()) {
+  // Name validation with sanitization
+  const sanitizedName = sanitizeInput(data.name);
+  if (!sanitizedName.trim()) {
     errors.name = 'Name is required';
     isValid = false;
+  } else if (sanitizedName.length > 50) {
+    errors.name = 'Name must be less than 50 characters';
+    isValid = false;
+  } else {
+    // Filter profanity from name
+    const filteredName = filterProfanity(sanitizedName);
+    if (filteredName !== sanitizedName) {
+      errors.name = 'Please use appropriate language';
+      isValid = false;
+    }
   }
 
   // Age validation
@@ -79,6 +93,9 @@ export function validatePersonalInfo(data: PersonalInfoData): ValidationResult<P
   // Gender validation
   if (!data.gender) {
     errors.gender = 'Gender is required';
+    isValid = false;
+  } else if (!['male', 'female', 'non-binary', 'prefer-not-to-say'].includes(data.gender)) {
+    errors.gender = 'Please select a valid gender option';
     isValid = false;
   }
 
@@ -127,13 +144,34 @@ export function validatePromptAnswers(answers: PromptAnswer[]): SimpleValidation
     };
   }
   
-  // Check if all answers are at least 10 characters
-  const shortAnswers = answers.filter(answer => answer.answer.trim().length < 10);
-  if (shortAnswers.length > 0) {
-    return {
-      isValid: false,
-      error: 'All answers must be at least 10 characters'
-    };
+  // Validate and sanitize each answer
+  for (const answer of answers) {
+    const sanitizedAnswer = sanitizeInput(answer.answer);
+    
+    // Check minimum length
+    if (sanitizedAnswer.trim().length < 10) {
+      return {
+        isValid: false,
+        error: 'All answers must be at least 10 characters'
+      };
+    }
+    
+    // Check maximum length
+    if (sanitizedAnswer.length > 300) {
+      return {
+        isValid: false,
+        error: 'Answers must be less than 300 characters'
+      };
+    }
+    
+    // Check for profanity
+    const filteredAnswer = filterProfanity(sanitizedAnswer);
+    if (filteredAnswer !== sanitizedAnswer) {
+      return {
+        isValid: false,
+        error: 'Please use appropriate language in your answers'
+      };
+    }
   }
   
   return {

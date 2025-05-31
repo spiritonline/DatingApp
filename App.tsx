@@ -7,18 +7,27 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { NavigationController } from './src/navigation/NavigationController';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 export default function App() {  
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <SafeAreaProvider>
-          <AuthProvider>
-            <AppContent />
-          </AuthProvider>
-        </SafeAreaProvider>
-      </ThemeProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary onError={(error, errorInfo) => {
+      // Log to crash reporting service in production
+      if (!__DEV__) {
+        // TODO: Add Firebase Crashlytics or similar
+        console.error('App Error:', error);
+      }
+    }}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <SafeAreaProvider>
+            <AuthProvider>
+              <AppContent />
+            </AuthProvider>
+          </SafeAreaProvider>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 

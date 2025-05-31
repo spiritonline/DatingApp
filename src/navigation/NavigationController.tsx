@@ -4,6 +4,7 @@ import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/
 import { AuthNavigator } from './AuthNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppTheme } from '../utils/useAppTheme';
+import { NavigationErrorBoundary } from '../components/ErrorBoundary';
 
 /**
  * Navigation controller component that handles navigation based on auth state
@@ -87,9 +88,11 @@ export function NavigationController() {
   }
 
   return (
-    <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
-      <AuthNavigator initialRouteName={determineInitialRoute()} />
-    </NavigationContainer>
+    <NavigationErrorBoundary>
+      <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
+        <AuthNavigator initialRouteName={determineInitialRoute()} />
+      </NavigationContainer>
+    </NavigationErrorBoundary>
   );
 }
 
