@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { collection, query, limit, orderBy, where, getDocs, DocumentData, QueryDocumentSnapshot, startAfter } from '@firebase/firestore';
 import { db, auth } from '../services/firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SecureStorage } from '../utils/secureStorage';
 
 export interface Profile {
   id: string;
@@ -61,11 +62,11 @@ export function useProfiles() {
     return age;
   };
 
-  // Load viewed profiles from AsyncStorage on mount
+  // Load viewed profiles from SecureStorage on mount
   useEffect(() => {
     const loadViewedProfiles = async () => {
       try {
-        const viewed = await AsyncStorage.getItem(VIEWED_PROFILES_KEY);
+        const viewed = await SecureStorage.getItem(VIEWED_PROFILES_KEY);
         if (viewed) {
           setViewedProfileIds(new Set(JSON.parse(viewed)));
         }
@@ -77,10 +78,10 @@ export function useProfiles() {
     loadViewedProfiles();
   }, []);
 
-  // Save viewed profiles to AsyncStorage when they change
+  // Save viewed profiles to SecureStorage when they change
   useEffect(() => {
     if (!isInitialLoad.current) {
-      AsyncStorage.setItem(VIEWED_PROFILES_KEY, JSON.stringify(Array.from(viewedProfileIds)))
+      SecureStorage.setItem(VIEWED_PROFILES_KEY, JSON.stringify(Array.from(viewedProfileIds)))
         .catch(error => console.error('Error saving viewed profiles:', error));
     } else {
       isInitialLoad.current = false;
@@ -276,7 +277,7 @@ export function useProfiles() {
     setProfiles([]);
     setHasMore(true);
     // Clear viewed profiles to start fresh
-    await AsyncStorage.removeItem(VIEWED_PROFILES_KEY);
+    await SecureStorage.removeItem(VIEWED_PROFILES_KEY);
     setViewedProfileIds(new Set());
     await refetch();
   };

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { collection, addDoc, query, where, getDocs, serverTimestamp } from '@firebase/firestore';
+import { collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { db, auth } from '../services/firebase';
 import { RootState } from '../store';

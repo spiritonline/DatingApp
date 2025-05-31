@@ -1,6 +1,7 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { CompositeNavigationProp } from '@react-navigation/native';
+import { LikeWithProfile } from '../types';
 
 // Auth navigation stack parameter list
 export type AuthStackParamList = {
@@ -30,11 +31,14 @@ export type AuthStackParamList = {
   DebugImageViewer: undefined;
   EditProfile: undefined;
   ImagePickerTest: undefined;
+  Preferences: undefined;
+  ProfileView: { like: LikeWithProfile };
 };
 
 // Main tab navigation parameter list
 export type MainTabParamList = {
   Discover: undefined;
+  Likes: undefined;
   ChatList: undefined;
   Profile: undefined;
 };

@@ -68,7 +68,9 @@ export const createUserProfile = async (uid: string): Promise<UserProfile> => {
     await setDoc(userProfileRef, profileData);
     return profileData;
   } catch (error) {
-    console.error('Error creating user profile:', error);
+    if (__DEV__) {
+      console.error('Error creating user profile:', error);
+    }
     throw new Error('Failed to create user profile');
   }
 };
@@ -89,7 +91,9 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
     
     return null;
   } catch (error) {
-    console.error('Error getting user profile:', error);
+    if (__DEV__) {
+      console.error('Error getting user profile:', error);
+    }
     throw new Error('Failed to get user profile');
   }
 };
@@ -112,7 +116,9 @@ export const updateUserProfile = async (
       updatedAt: serverTimestamp()
     });
   } catch (error) {
-    console.error('Error updating user profile:', error);
+    if (__DEV__) {
+      console.error('Error updating user profile:', error);
+    }
     throw new Error('Failed to update user profile');
   }
 };
@@ -125,7 +131,9 @@ export const updateUserProfile = async (
 export const isProfileComplete = (profile: UserProfile | null): boolean => {
   if (!profile) return false;
   
-  console.log('Checking profile completion with data:', JSON.stringify(profile, null, 2));
+  if (__DEV__) {
+    console.log('Checking profile completion with data:', JSON.stringify(profile, null, 2));
+  }
   
   // Support both old and new field names for backward compatibility
   const hasName = profile.displayName || profile.name;
@@ -142,7 +150,9 @@ export const isProfileComplete = (profile: UserProfile | null): boolean => {
   // Always check if the flag is explicitly set to true
   const isFlagSet = profile.profileComplete === true;
   
-  console.log(`Profile completion check - Basic info: ${isBasicInfoComplete}, Flag set: ${isFlagSet}`);
+  if (__DEV__) {
+    console.log(`Profile completion check - Basic info: ${isBasicInfoComplete}, Flag set: ${isFlagSet}`);
+  }
   
   // Either the basic info is complete or the flag is explicitly set
   return isBasicInfoComplete || isFlagSet;
@@ -165,7 +175,9 @@ export const updateProfileCompletionStatus = async (uid: string): Promise<boolea
     
     return isComplete;
   } catch (error) {
-    console.error('Error updating profile completion status:', error);
+    if (__DEV__) {
+      console.error('Error updating profile completion status:', error);
+    }
     throw new Error('Failed to update profile completion status');
   }
 };

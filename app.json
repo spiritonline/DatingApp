@@ -18,7 +18,8 @@
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSPhotoLibraryAddUsageDescription": "Allow $(PRODUCT_NAME) to save photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone"
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
+        "NSLocationWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to access your location to find matches nearby"
       }
     },
     "android": {
@@ -30,7 +31,9 @@
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -42,6 +45,12 @@
         {
           "photosPermission": "The app accesses your photos to let you share them with your matches.",
           "cameraPermission": "The app accesses your camera to let you take photos to share with your matches."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to find matches nearby."
         }
       ]
     ]

@@ -37,10 +37,10 @@ export const selectFromGallery = async (
     // Convert options to Expo image picker format
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: options.mediaType === 'video' ? 
-        ImagePicker.MediaTypeOptions.Videos : 
+        ['videos'] as const : 
         (options.mediaType === 'photo' ? 
-          ImagePicker.MediaTypeOptions.Images : 
-          ImagePicker.MediaTypeOptions.All),
+          ['images'] as const : 
+          ['images', 'videos'] as const),
       allowsEditing: options.cropping || true,
       aspect: options.cropperCircleOverlay ? [1, 1] : [options.width || 4, options.height || 3],
       quality: options.compressImageQuality || 0.8,
@@ -107,8 +107,8 @@ export const captureFromCamera = async (
     // Convert options to Expo image picker format
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: options.mediaType === 'video' ? 
-        ImagePicker.MediaTypeOptions.Videos : 
-        ImagePicker.MediaTypeOptions.Images,
+        ['videos'] as const : 
+        ['images'] as const,
       allowsEditing: options.cropping || true,
       aspect: options.cropperCircleOverlay ? [1, 1] : [options.width || 4, options.height || 3],
       quality: options.compressImageQuality || 0.8,

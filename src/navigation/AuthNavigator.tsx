@@ -14,6 +14,8 @@ import ImageViewerScreen from '../screens/ImageViewerScreen';
 import DebugImageViewerScreen from '../screens/DebugImageViewerScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import ImagePickerTestScreen from '../screens/debug/ImagePickerTestScreen';
+import { PreferencesScreen } from '../screens/PreferencesScreen';
+import ProfileViewScreen from '../screens/ProfileViewScreen';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
@@ -69,6 +71,22 @@ export function AuthNavigator({ initialRouteName = 'Welcome' }: AuthNavigatorPro
         options={{
           headerShown: true,
           headerTitle: 'Image Picker Test',
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen 
+        name="Preferences" 
+        component={PreferencesScreen} 
+        options={{
+          headerShown: false,
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen 
+        name="ProfileView" 
+        component={ProfileViewScreen} 
+        options={{
+          headerShown: false,
           animation: 'slide_from_right'
         }}
       />

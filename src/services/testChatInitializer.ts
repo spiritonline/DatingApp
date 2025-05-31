@@ -1,27 +1,27 @@
 import { auth } from './firebase';
-import { initializeTestChat, isTestUser } from './chatService';
+import { initializeJakeChat } from './chatService';
 import { onAuthStateChanged } from '@firebase/auth';
 
 /**
- * Initialize the test chat system that handles automatically creating
- * and maintaining the test chat conversation between the two test accounts.
+ * Initialize the auto-chat system that handles automatically creating
+ * and maintaining a chat conversation between any user and Jake Martinez.
  * 
  * This should be called once when the app starts up.
  */
-export function initializeTestChatSystem() {
-  // Listen for auth state changes to detect when a test user logs in
+export function initializeJakeChatSystem() {
+  // Listen for auth state changes to detect when any user logs in
   const unsubscribe = onAuthStateChanged(auth, async (user) => {
-    if (user && isTestUser()) {
-      console.log('Test user detected, initializing test chat...');
+    if (user) {
+      console.log('User detected, ensuring Jake chat exists...');
       try {
-        const chatId = await initializeTestChat();
+        const chatId = await initializeJakeChat();
         if (chatId) {
-          console.log('Test chat initialized successfully with ID:', chatId);
+          console.log('Jake chat ensured successfully with ID:', chatId);
         } else {
-          console.warn('Failed to initialize test chat');
+          console.log('No Jake chat needed (user might be Jake himself)');
         }
       } catch (error) {
-        console.error('Error initializing test chat:', error);
+        console.error('Error ensuring Jake chat:', error);
       }
     }
   });

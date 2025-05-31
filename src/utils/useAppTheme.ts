@@ -1,5 +1,4 @@
-import { useContext } from 'react';
-import { ThemeContext } from '../contexts/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 
 /**
  * Custom hook that safely accesses the theme context
@@ -7,15 +6,11 @@ import { ThemeContext } from '../contexts/ThemeContext';
  * instead of directly calling useColorScheme in components
  */
 export function useAppTheme() {
-  const context = useContext(ThemeContext);
-  
-  if (!context) {
-    throw new Error('useAppTheme must be used within a ThemeProvider');
-  }
+  const { theme, isDark } = useTheme();
   
   // Return the same structure to maintain compatibility
   return {
-    isDark: context.isDark,
-    colors: context.theme.colors
+    isDark,
+    colors: theme
   };
 }

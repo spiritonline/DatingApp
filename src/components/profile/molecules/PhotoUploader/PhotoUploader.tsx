@@ -121,7 +121,11 @@ export function PhotoUploader({
     <Container>
       {/* Photo grid - using View instead of FlatList to prevent VirtualizedList nesting error */}
       <PhotoGrid>
-        {photos.map(item => renderPhoto({ item }))} 
+        {photos.map(item => (
+          <React.Fragment key={item.id}>
+            {renderPhoto({ item })}
+          </React.Fragment>
+        ))} 
         {photos.length < maxPhotos && renderAddPhoto()}
       </PhotoGrid>
       
@@ -202,27 +206,6 @@ const AddPhotoText = styled.Text<AddPhotoTextProps>`
   font-size: 12px;
   margin-top: 8px;
   color: ${(props: AddPhotoTextProps) => props.isDark ? '#FFFFFF' : '#333333'};
-`;
-
-const OptionsContainer = styled.View<{ isDark?: boolean }>`
-  flex-direction: row;
-  justify-content: space-around;
-  margin-top: 16px;
-  margin-bottom: 16px;
-`;
-
-const PhotoOption = styled.TouchableOpacity<{ isDark?: boolean }>`
-  align-items: center;
-  padding: 12px;
-  border-radius: 8px;
-  background-color: ${(props: { isDark?: boolean }) => props.isDark ? '#2C2C2E' : '#F5F5F5'};
-  width: 45%;
-`;
-
-const OptionText = styled.Text<{ isDark?: boolean }>`
-  font-size: 14px;
-  margin-top: 8px;
-  color: ${(props: { isDark?: boolean }) => props.isDark ? '#FFFFFF' : '#333333'};
 `;
 
 const ErrorText = styled.Text<{ isDark?: boolean }>`

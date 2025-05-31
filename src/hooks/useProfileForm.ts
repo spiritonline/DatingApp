@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { UserProfile } from '../services/profileService';
 import { validateProfile, ProfileValidationResult } from '../utils/validators/profileValidators';
 import { auth, db } from '../services/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp } from '@firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 /**
  * Custom hook for managing profile form state and operations

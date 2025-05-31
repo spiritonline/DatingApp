@@ -17,7 +17,7 @@ import styled from 'styled-components/native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MainNavigationProp } from '../navigation/types';
 import { auth, db } from '../services/firebase';
-import { getUserChats, initializeTestChat, isTestUser, ChatPreview as ChatPreviewType } from '../services/chatService';
+import { getUserChats, ChatPreview as ChatPreviewType } from '../services/chatService';
 import { getUserProfile } from '../services/profileService';
 import { useAppTheme } from '../utils/useAppTheme';
 import { doc, getDoc } from '@firebase/firestore';
@@ -138,31 +138,6 @@ const LoadingContainer = styled.View`
   align-items: center;
 `;
 
-const StartTestChatButton = styled.TouchableOpacity<{ disabled?: boolean }>`
-  padding: 8px 12px;
-  border-radius: 16px;
-  background-color: #FF6B6B;
-  opacity: ${(props: { disabled?: boolean }) => props.disabled ? 0.5 : 1};
-`;
-
-const StartTestChatText = styled.Text`
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: bold;
-`;
-
-const TestChatBadge = styled.View`
-  background-color: #4CAF50;
-  padding: 2px 6px;
-  border-radius: 10px;
-  margin-left: 8px;
-`;
-
-const TestChatBadgeText = styled.Text`
-  color: white;
-  font-size: 10px;
-  font-weight: bold;
-`;
 
 // A simplified chat preview item type
 interface ChatPreview {
@@ -183,7 +158,6 @@ export default function ChatListScreen() {
   const navigation = useNavigation<MainNavigationProp>();
   const [chats, setChats] = useState<ChatPreview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isTestChatInitializing, setIsTestChatInitializing] = useState(false);
   const currentUser = auth.currentUser;
   
   // Cache for display names and profile images to avoid excessive Firestore reads
@@ -254,7 +228,13 @@ export default function ChatListScreen() {
     try {
       // Get user profile from Firestore
       const profile = await getUserProfile(userId);
-      const name = profile?.displayName || profile?.name || 'User';
+      if (!profile) {
+        // If no profile found, return a more descriptive fallback
+        console.warn(`No profile found for user ${userId}`);
+        return `User ${userId.substring(0, 8)}`;
+      }
+      
+      const name = profile.displayName || profile.name || `User ${userId.substring(0, 8)}`;
       
       // Update cache
       setDisplayNameCache(prev => ({ ...prev, [userId]: name }));
@@ -270,7 +250,7 @@ export default function ChatListScreen() {
       return name;
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      return 'User';
+      return `User ${userId.substring(0, 8)}`;
     }
   };
   
@@ -430,37 +410,12 @@ export default function ChatListScreen() {
     navigation.navigate('ChatConversation', { chatId, partnerName });
   };
   
-  // Handle starting a test chat
-  const handleStartTestChat = async () => {
-    if (!currentUser) return;
-    
-    try {
-      setIsTestChatInitializing(true);
-      await initializeTestChat();
-      // Refresh the chat list to show the new test chat
-      await fetchChats();
-    } catch (error) {
-      console.error('Error starting test chat:', error);
-    } finally {
-      setIsTestChatInitializing(false);
-    }
-  };
 
   return (
     <Animated.View style={{ flex: 1 }} entering={FadeIn.duration(300)}>
       <Container isDark={isDark}>
       <HeaderContainer>
         <Title isDark={isDark}>Messages</Title>
-        {isTestUser() && (
-          <StartTestChatButton 
-            onPress={handleStartTestChat} 
-            disabled={isTestChatInitializing}
-          >
-            <StartTestChatText>
-              {isTestChatInitializing ? 'Starting...' : 'Start Test Chat'}
-            </StartTestChatText>
-          </StartTestChatButton>
-        )}
       </HeaderContainer>
 
       {isLoading ? (
@@ -509,11 +464,6 @@ export default function ChatListScreen() {
                 <ChatHeader>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <ChatName isDark={isDark}>{item.name}</ChatName>
-                    {item.isTestChat && (
-                      <TestChatBadge>
-                        <TestChatBadgeText>TEST</TestChatBadgeText>
-                      </TestChatBadge>
-                    )}
                   </View>
                   <ChatTime isDark={isDark}>
                     {item.timestamp}

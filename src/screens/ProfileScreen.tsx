@@ -217,6 +217,24 @@ export default function ProfileScreen() {
         </SectionContainer>
         
         <SectionContainer>
+          <SectionTitle isDark={isDark}>Dating Preferences</SectionTitle>
+          
+          <SettingButton
+            onPress={() => navigation.navigate('Preferences')}
+            accessibilityLabel="Configure dating preferences"
+            accessibilityRole="button"
+            testID="preferences-button"
+          >
+            <SettingButtonLabel isDark={isDark}>
+              Dating Preferences
+            </SettingButtonLabel>
+            <SettingButtonValue isDark={isDark}>
+              Configure filters & dealbreakers
+            </SettingButtonValue>
+          </SettingButton>
+        </SectionContainer>
+        
+        <SectionContainer>
           <SectionTitle isDark={isDark}>Account</SectionTitle>
           
           <SettingButton

@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from './types';
 import DiscoverScreen from '../screens/DiscoverScreen';
+import LikesScreen from '../screens/LikesScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { useAppTheme } from '../utils/useAppTheme';
@@ -39,6 +40,16 @@ export function MainTabNavigator() {
           tabBarLabel: 'Discover',
           tabBarIcon: ({ color, size }) => (
             <TabBarIcon name="❤️" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Likes"
+        component={LikesScreen}
+        options={{
+          tabBarLabel: 'Likes',
+          tabBarIcon: ({ color, size }) => (
+            <TabBarIcon name="👥" color={color} size={size} />
           ),
         }}
       />

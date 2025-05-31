@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Keyboard } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Keyboard, Image } from 'react-native';
 import { 
   ScrollView, 
   View, 
@@ -10,57 +10,23 @@ import {
   TouchableOpacity,
   TextInput as RNTextInput,
   Text as RNText,
-  SafeAreaView as RNSafeAreaView,
-  ViewStyle,
-  TextStyle,
-  TouchableOpacityProps,
-  TextInputProps,
-  TextProps,
-  Switch
+  SafeAreaView as RNSafeAreaView
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import styled, { css, DefaultTheme } from 'styled-components/native';
-import { useTheme } from 'styled-components';
-import { useAuth } from '../../../../contexts/AuthContext';
+import styled from 'styled-components/native';
+import { useAppTheme } from '../../../../utils/useAppTheme';
 import { useProfileForm } from '../../../../hooks/useProfileForm';
 import { PromptAnswer, UserProfile } from '../../../../types/index';
 import { PromptEditor } from '../../molecules/PromptEditor';
 import { PhotoUploader } from '../../molecules/PhotoUploader';
 import { validateProfile } from '../../../../utils/validators/profileValidators';
+import { useImagePicker } from '../../../../hooks/useImagePicker';
 
-// Extend the DefaultTheme to include our custom theme properties
-declare module 'styled-components' {
-  export interface DefaultTheme {
-    isDark: boolean;
-    colors: {
-      primary: string;
-      background: string;
-      card: string;
-      text: string;
-      border: string;
-      notification: string;
-    };
-  }
-}
 
 // Styled Components with TypeScript
 type DarkModeProps = { isDark: boolean };
-type SelectedProps = { selected: boolean };
 type DisabledProps = { disabled?: boolean };
-type ErrorProps = { hasError?: boolean };
 
-type PromptEditorProps = {
-  initialPrompts: PromptAnswer[];
-  onPromptsChanged: (prompts: PromptAnswer[]) => void;
-  isDark: boolean;
-};
-
-type PhotoUploaderProps = {
-  initialPhotos: string[];
-  onPhotosChanged: (photos: string[]) => void;
-  maxPhotos: number;
-  isDark: boolean;
-};
 
 const Container = styled(RNSafeAreaView)<DarkModeProps>`
   flex: 1;
@@ -108,17 +74,6 @@ const Input = styled(RNTextInput)<DarkModeProps & { hasError?: boolean }>`
   border: 1px solid ${(props: DarkModeProps) => props.isDark ? '#444444' : '#DDDDDD'};
 `;
 
-const HelpText = styled(RNText)<DarkModeProps>`
-  font-size: 12px;
-  color: ${(props: DarkModeProps) => props.isDark ? '#888888' : '#999999'};
-  margin-top: 4px;
-`;
-
-const ErrorText = styled(RNText)`
-  color: #FF3B30;
-  font-size: 14px;
-  margin-top: 4px;
-`;
 
 const GendersContainer = styled.View`
   flex-direction: row;
@@ -142,20 +97,45 @@ const GenderOptionText = styled(RNText)<{isSelected: boolean} & DarkModeProps>`
   font-weight: ${(props: {isSelected: boolean}) => props.isSelected ? 'bold' : 'normal'};
 `;
 
-const LocationConsentContainer = styled(View)<DarkModeProps>`
-  flex-direction: row;
+const ProfilePictureContainer = styled(View)`
   align-items: center;
-  margin-top: 16px;
-  padding: 12px;
+  margin-bottom: 24px;
+`;
+
+const ProfilePicture = styled(Image)`
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  background-color: #F0F0F0;
+`;
+
+const ProfilePicturePlaceholder = styled(View)`
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  background-color: #FF6B6B;
+  justify-content: center;
+  align-items: center;
+`;
+
+const ProfilePicturePlaceholderText = styled(RNText)`
+  font-size: 48px;
+  font-weight: bold;
+  color: #FFFFFF;
+`;
+
+const ChangePhotoButton = styled(TouchableOpacity)<DarkModeProps>`
+  margin-top: 12px;
+  padding: 8px 16px;
   background-color: ${(props: DarkModeProps) => props.isDark ? '#2C2C2E' : '#F5F5F5'};
-  border-radius: 8px;
+  border-radius: 20px;
   border: 1px solid ${(props: DarkModeProps) => props.isDark ? '#444444' : '#DDDDDD'};
 `;
 
-const LocationConsentText = styled(RNText)<DarkModeProps>`
-  flex: 1;
-  color: ${(props: DarkModeProps) => props.isDark ? '#FFFFFF' : '#333333'};
-  margin-left: 12px;
+const ChangePhotoText = styled(RNText)<DarkModeProps>`
+  color: ${(props: DarkModeProps) => props.isDark ? '#FF6B6B' : '#FF6B6B'};
+  font-weight: 600;
+  font-size: 14px;
 `;
 
 const SaveButton = styled(TouchableOpacity).attrs<DisabledProps & DarkModeProps>({
@@ -183,28 +163,32 @@ const GENDER_OPTIONS = [
   { id: 'prefer-not-to-say', label: 'Prefer not to say' }
 ];
 
-export const EditProfileScreen = () => {
-    const theme = useTheme();
-  const isDark = theme.isDark;
+interface EditProfileScreenProps {
+  saveRef?: React.MutableRefObject<(() => Promise<void>) | null>;
+}
+
+export const EditProfileScreen = ({ saveRef }: EditProfileScreenProps = {}) => {
+  const { isDark, colors } = useAppTheme();
   const navigation = useNavigation();
   
-  const { user } = useAuth();
-  const { formData, validation, isLoading, error, fetchProfile, handleChange, saveProfile } = useProfileForm();
+  const { isLoading, fetchProfile, handleChange, saveProfile } = useProfileForm();
   const [isSaving, setIsSaving] = useState(false);
   
   // Local state for form data
   const [localFormData, setLocalFormData] = useState<Partial<UserProfile>>({
-    name: formData.name || '',
-    age: typeof formData.age === 'string' ? parseInt(formData.age, 10) : formData.age,
-    gender: formData.gender || '',
-    bio: formData.bio || '',
-    locationConsent: formData.locationConsent || false,
-    prompts: formData.prompts || [],
-    photos: formData.photos || [],
+    name: '',
+    age: undefined,
+    gender: '',
+    prompts: [],
+    photos: [],
   });
   
   const [selectedGender, setSelectedGender] = useState<string>('');
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  
+  // Image picker hook
+  const { pickFromGallery } = useImagePicker();
   
   // Toggle keyboard visibility state
   useEffect(() => {
@@ -223,12 +207,29 @@ export const EditProfileScreen = () => {
     };
   }, []);
   
-  // Fetch user profile on mount
+  // Fetch user profile on mount and update local state
   useEffect(() => {
     const loadProfile = async () => {
       const profileData = await fetchProfile();
-      if (profileData?.gender) {
-        setSelectedGender(profileData.gender);
+      if (profileData) {
+        // Update local form data with fetched data
+        setLocalFormData({
+          name: profileData.name || profileData.displayName || '',
+          age: typeof profileData.age === 'number' ? profileData.age : (typeof profileData.birthdate === 'number' ? profileData.birthdate : undefined),
+          gender: profileData.gender || '',
+          prompts: profileData.prompts || [],
+          photos: profileData.photos || [],
+        });
+        
+        // Update selected gender
+        if (profileData.gender) {
+          setSelectedGender(profileData.gender);
+        }
+        
+        // Set profile picture (first photo if available)
+        if (profileData.photos && profileData.photos.length > 0) {
+          setProfilePicture(profileData.photos[0]);
+        }
       }
     };
     
@@ -252,12 +253,6 @@ export const EditProfileScreen = () => {
     }
   };
   
-  // Handle bio change
-  const handleBioChange = (text: string) => {
-    const newData = { ...localFormData, bio: text };
-    setLocalFormData(newData);
-    handleChange('bio', text);
-  };
   
   // Handle gender selection
   const handleGenderSelect = (gender: string) => {
@@ -267,33 +262,33 @@ export const EditProfileScreen = () => {
     handleChange('gender', gender);
   };
   
-  // Toggle location consent
-  const toggleLocationConsent = useCallback(() => {
-    const newConsent = !localFormData.locationConsent;
-    const newData = { ...localFormData, locationConsent: newConsent };
-    setLocalFormData(newData);
-    handleChange('locationConsent', newConsent);
-  }, [localFormData.locationConsent, handleChange]);
   
   // Handle photo updates
   const handlePhotosChange = (photoUrls: string[]) => {
     const newData = { ...localFormData, photos: photoUrls };
     setLocalFormData(newData);
     handleChange('photos', photoUrls);
-  };
-  
-  // Handle prompt answer change
-  const handlePromptChange = (id: string, text: string) => {
-    const prompts = localFormData.prompts ? [...localFormData.prompts] : [];
-    const promptIndex = prompts.findIndex(p => p.id === id);
     
-    if (promptIndex !== -1) {
-      prompts[promptIndex].answer = text;
-      const newData = { ...localFormData, prompts };
-      setLocalFormData(newData);
-      handleChange('prompts', prompts);
+    // Update profile picture if photos change
+    if (photoUrls.length > 0) {
+      setProfilePicture(photoUrls[0]);
+    } else {
+      setProfilePicture(null);
     }
   };
+  
+  // Handle profile picture change
+  const handleProfilePictureChange = async () => {
+    const result = await pickFromGallery('profile');
+    if (result && !result.canceled && result.assets && result.assets[0]) {
+      const newPhotoUri = result.assets[0].uri;
+      
+      // Update photos array with new profile picture at the beginning
+      const updatedPhotos = [newPhotoUri, ...(localFormData.photos || []).filter(p => p !== newPhotoUri)];
+      handlePhotosChange(updatedPhotos);
+    }
+  };
+  
   
   // Handle prompts change
   const handlePromptsChanged = (prompts: PromptAnswer[]) => {
@@ -357,11 +352,23 @@ export const EditProfileScreen = () => {
       setIsSaving(false);
     }
   };
+
+  // Expose save function through ref
+  React.useEffect(() => {
+    if (saveRef) {
+      saveRef.current = handleSave;
+    }
+    return () => {
+      if (saveRef) {
+        saveRef.current = null;
+      }
+    };
+  }, [saveRef, handleSave]);
   
   if (isLoading) {
     return (
       <LoadingContainer isDark={isDark}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <LoadingText isDark={isDark}>Loading profile...</LoadingText>
       </LoadingContainer>
     );
@@ -375,6 +382,30 @@ export const EditProfileScreen = () => {
     >
       <Container isDark={isDark}>
         <ScrollView contentContainerStyle={{ padding: 16 }}>
+          {/* Profile Picture Section */}
+          <ProfilePictureContainer>
+            {profilePicture ? (
+              <ProfilePicture 
+                source={{ uri: profilePicture }} 
+              />
+            ) : (
+              <ProfilePicturePlaceholder>
+                <ProfilePicturePlaceholderText>
+                  {localFormData.name ? localFormData.name.charAt(0).toUpperCase() : 'U'}
+                </ProfilePicturePlaceholderText>
+              </ProfilePicturePlaceholder>
+            )}
+            <ChangePhotoButton 
+              onPress={handleProfilePictureChange}
+              isDark={isDark}
+              accessibilityLabel="Change profile picture"
+              accessibilityRole="button"
+              testID="change-profile-picture-button"
+            >
+              <ChangePhotoText isDark={isDark}>Change Photo</ChangePhotoText>
+            </ChangePhotoButton>
+          </ProfilePictureContainer>
+          
           <SectionTitle isDark={isDark}>Basic Information</SectionTitle>
           
           {/* Name input */}
@@ -430,36 +461,6 @@ export const EditProfileScreen = () => {
             </GendersContainer>
           </FormGroup>
           
-          {/* Location Consent */}
-          <FormGroup>
-            <LocationConsentContainer isDark={isDark}>
-              <Switch
-                value={localFormData.locationConsent || false}
-                onValueChange={(value) => toggleLocationConsent()}
-                trackColor={{ false: '#767577', true: '#81b0ff' }}
-                thumbColor={localFormData.locationConsent ? '#f5dd4b' : '#f4f3f4'}
-              />
-              <LocationConsentText isDark={isDark}>
-                I agree to share my location to find matches nearby
-              </LocationConsentText>
-            </LocationConsentContainer>
-          </FormGroup>
-          
-          {/* Bio */}
-          <FormGroup>
-            <FormLabel isDark={isDark}>Bio</FormLabel>
-            <Input
-              isDark={isDark}
-              value={localFormData.bio || ''}
-              onChangeText={handleBioChange}
-              placeholder="Tell us about yourself"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              accessibilityLabel="Bio input"
-              testID="bio-input"
-            />
-          </FormGroup>
           
           {/* Photo upload */}
           <FormGroup>
@@ -479,6 +480,7 @@ export const EditProfileScreen = () => {
               initialPrompts={localFormData.prompts || []}
               onPromptsChanged={handlePromptsChanged}
               isDark={isDark}
+              maxPrompts={10}
             />
           </FormGroup>
           

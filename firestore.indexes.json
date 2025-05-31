@@ -5,8 +5,7 @@
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "isRead", "order": "ASCENDING" },
-        { "fieldPath": "senderId", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
+        { "fieldPath": "senderId", "order": "ASCENDING" }
       ]
     },
     {
@@ -14,10 +13,117 @@
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "senderId", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
+        { "fieldPath": "senderId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "senderId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gender", "order": "ASCENDING" },
+        { "fieldPath": "visible", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gender", "order": "ASCENDING" },
+        { "fieldPath": "preferences.ageRange.min", "order": "ASCENDING" },
+        { "fieldPath": "preferences.ageRange.max", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "visible", "order": "ASCENDING" },
+        { "fieldPath": "location", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "preferences.interestedIn.value", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "gender", "order": "ASCENDING" },
+        { "fieldPath": "visible", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "likes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "likes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "toUserId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user1Id", "order": "ASCENDING" },
+        { "fieldPath": "lastActivity", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "user2Id", "order": "ASCENDING" },
+        { "fieldPath": "lastActivity", "order": "DESCENDING" }
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "profiles",
+      "fieldPath": "preferences.interestedIn.value",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "profiles",
+      "fieldPath": "location",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    }
+  ]
 }

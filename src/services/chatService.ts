@@ -4,65 +4,94 @@ import { db, auth } from './firebase';
 import { ChatServiceMessage, ChatPreview, GalleryMediaItem } from '../types/chat';
 import { getUserProfile } from './profileService';
 
-const TEST_USER_1_UID = 'dqrwMcXBVwTYqYBhdcZDNApIu6l1';
-const TEST_USER_2_UID = 'gxCPvaE154aQ6VE1yESLD6dloTy1';
-const TEST_USER_DISPLAY_NAMES: Record<string, string> = {
-  [TEST_USER_1_UID]: 'Test User 1',
-  [TEST_USER_2_UID]: 'Test User 2',
-};
-const TEST_CHAT_ID = `testChat_${[TEST_USER_1_UID, TEST_USER_2_UID].sort().join('_')}`;
+// Jake Martinez - the default chat partner for all users
+const JAKE_MARTINEZ_UID = 'Iq8dtHo0rnSbQsbos2bzVfapHp42';
 
 export type { ChatServiceMessage, ChatPreview, GalleryMediaItem };
 
-export function isTestUser(): boolean {
-  const currentUserId = auth.currentUser?.uid;
-  return currentUserId === TEST_USER_1_UID || currentUserId === TEST_USER_2_UID;
+// Generate chat ID between current user and Jake Martinez
+function generateChatId(userId1: string, userId2: string): string {
+  return [userId1, userId2].sort().join('_');
 }
 
-export function getOtherTestUserId(): string | null {
-  const currentUserId = auth.currentUser?.uid;
-  if (currentUserId === TEST_USER_1_UID) return TEST_USER_2_UID;
-  if (currentUserId === TEST_USER_2_UID) return TEST_USER_1_UID;
-  return null;
-}
-
-export async function initializeTestChat(): Promise<string | null> {
+export async function initializeJakeChat(): Promise<string | null> {
   try {
-    if (!isTestUser()) return null;
     const currentUserId = auth.currentUser?.uid;
     if (!currentUserId) {
-      console.error('No user is currently logged in for initializeTestChat');
+      if (__DEV__) {
+        console.error('No user is currently logged in for initializeJakeChat');
+      }
       return null;
     }
 
-    const chatDocRef = doc(db, 'chats', TEST_CHAT_ID);
+    // Don't create chat if user is Jake Martinez himself
+    if (currentUserId === JAKE_MARTINEZ_UID) {
+      if (__DEV__) {
+        console.log('Current user is Jake Martinez, skipping auto-chat creation');
+      }
+      return null;
+    }
+
+    const chatId = generateChatId(currentUserId, JAKE_MARTINEZ_UID);
+    const chatDocRef = doc(db, 'chats', chatId);
     const chatDocSnap = await getDoc(chatDocRef);
 
     if (!chatDocSnap.exists()) {
+      // Get Jake's profile to ensure he exists
+      const jakeProfile = await getUserProfile(JAKE_MARTINEZ_UID);
+      if (!jakeProfile) {
+        if (__DEV__) {
+          console.error('Jake Martinez profile not found in database');
+        }
+        return null;
+      }
+
+      // Get current user's profile
+      const currentUserProfile = await getUserProfile(currentUserId);
+      if (!currentUserProfile) {
+        if (__DEV__) {
+          console.error('Current user profile not found');
+        }
+        return null;
+      }
+
+      // Create the chat
       await setDoc(chatDocRef, {
-        participantIds: [TEST_USER_1_UID, TEST_USER_2_UID],
-        participantNames: TEST_USER_DISPLAY_NAMES,
+        participantIds: [currentUserId, JAKE_MARTINEZ_UID],
+        participantNames: {
+          [currentUserId]: currentUserProfile.displayName || currentUserProfile.name || 'User',
+          [JAKE_MARTINEZ_UID]: jakeProfile.displayName || jakeProfile.name || 'Jake Martinez'
+        },
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        isTestChat: true,
+        isDefaultChat: true,
       });
 
-      const messagesRef = collection(db, `chats/${TEST_CHAT_ID}/messages`);
-      const initialMessage: Partial<ChatServiceMessage> = {
-        senderId: 'system',
-        content: '🧪 This is a test conversation between Test User 1 and Test User 2',
+      // Add a welcome message from Jake
+      const messagesRef = collection(db, `chats/${chatId}/messages`);
+      const welcomeMessage: Partial<ChatServiceMessage> = {
+        senderId: JAKE_MARTINEZ_UID,
+        content: '👋 Hey there! Welcome to the app. Feel free to message me anytime!',
         type: 'text',
         createdAt: serverTimestamp() as Timestamp,
         status: 'sent',
       };
-      await addDoc(messagesRef, initialMessage);
-      console.log('Test chat initialized successfully');
+      await addDoc(messagesRef, welcomeMessage);
+      
+      if (__DEV__) {
+        console.log('Jake chat initialized successfully with ID:', chatId);
+      }
     } else {
-      console.log('Test chat already exists');
+      if (__DEV__) {
+        console.log('Chat with Jake already exists:', chatId);
+      }
     }
-    return TEST_CHAT_ID;
+    
+    return chatId;
   } catch (error) {
-    console.error('Error initializing test chat:', error);
+    if (__DEV__) {
+      console.error('Error initializing Jake chat:', error);
+    }
     return null;
   }
 }
@@ -84,56 +113,91 @@ export async function getUserChats(): Promise<ChatPreview[]> {
       const participantIds = chatData.participantIds || [];
       const otherParticipantId = participantIds.find((id: string) => id !== currentUserId);
       
+      // Skip chats without valid other participant
+      if (!otherParticipantId) {
+        console.warn(`Skipping chat ${chatDoc.id}: no valid other participant found`);
+        return;
+      }
+      
+      // Skip legacy test chats (but keep Jake Martinez default chats)
+      const isLegacyTestChat = chatDoc.id.startsWith('testChat_') && !chatData.isDefaultChat;
+      if (isLegacyTestChat) {
+        console.warn(`Skipping legacy test chat: ${chatDoc.id}`);
+        return;
+      }
+      
       // Get the other participant's profile
-      let participantName = 'Unknown User';
+      let participantName = '';
+      let profileExists = false;
+      
       if (otherParticipantId) {
         try {
           const profile = await getUserProfile(otherParticipantId);
-          participantName = profile?.displayName || profile?.name || otherParticipantId.substring(0, 8);
+          if (profile) {
+            participantName = profile.displayName || profile.name || `User ${otherParticipantId.substring(0, 8)}`;
+            profileExists = true;
+          }
         } catch (error) {
           console.error(`Error fetching profile for user ${otherParticipantId}:`, error);
         }
       }
       
-      // For test chats, ensure we have a clear indicator
-      const isTestChat = chatData.isTestChat || false;
-      const displayName = isTestChat ? `${participantName} (Test)` : participantName;
+      // Skip chats where the other participant's profile doesn't exist (orphaned chats)
+      // Exception: Keep Jake Martinez chats even if profile fetch fails
+      const isJakeChat = otherParticipantId === JAKE_MARTINEZ_UID || chatData.isDefaultChat;
+      if (!profileExists && !isJakeChat) {
+        console.warn(`Skipping orphaned chat ${chatDoc.id}: participant ${otherParticipantId} profile not found`);
+        return;
+      }
+      
+      // For Jake Martinez chats, ensure we have a proper name even if profile fetch fails
+      if (isJakeChat && !participantName) {
+        participantName = 'Jake Martinez';
+      }
+      
+      // Mark default chats (chats with Jake Martinez)
+      const isDefaultChat = chatData.isDefaultChat || isJakeChat;
       
       chats.push({
         id: chatDoc.id,
         participantIds,
         participantNames: {
           ...chatData.participantNames,
-          [otherParticipantId || '']: displayName
+          [otherParticipantId]: participantName
         },
         lastMessage: chatData.lastMessage,
-        isTestChat,
+        isTestChat: false, // No more test chats
         unreadCount: chatData.unreadCount,
       });
     }));
 
-    // If this is a test user and test chat doesn't exist, initialize it
-    if (isTestUser() && !chats.some(chat => chat.id === TEST_CHAT_ID)) {
-      const initializedTestChatId = await initializeTestChat();
-      if (initializedTestChatId) {
-        const testChatDoc = await getDoc(doc(db, 'chats', TEST_CHAT_ID));
-        if (testChatDoc.exists()) {
-          const testChatData = testChatDoc.data();
-          const otherTestUserId = getOtherTestUserId();
-          const otherTestUserName = otherTestUserId ? TEST_USER_DISPLAY_NAMES[otherTestUserId] : 'Test User';
-          
-          chats.push({
-            id: TEST_CHAT_ID,
-            participantIds: testChatData.participantIds || [],
-            participantNames: {
-              ...testChatData.participantNames,
-              [otherTestUserId || '']: `${otherTestUserName} (Test)`
-            },
-              lastMessage: testChatData.lastMessage,
-              isTestChat: true,
-              unreadCount: testChatData.unreadCount,
+    // Auto-initialize Jake chat for all users (except Jake himself)
+    if (currentUserId !== JAKE_MARTINEZ_UID) {
+      const jakeChatId = generateChatId(currentUserId, JAKE_MARTINEZ_UID);
+      const existingJakeChat = chats.find(chat => chat.id === jakeChatId);
+      
+      if (!existingJakeChat) {
+        const initializedJakeChatId = await initializeJakeChat();
+        if (initializedJakeChatId) {
+          // Refresh the specific Jake chat after creation
+          const jakeChatDoc = await getDoc(doc(db, 'chats', jakeChatId));
+          if (jakeChatDoc.exists()) {
+            const jakeChatData = jakeChatDoc.data();
+            const jakeProfile = await getUserProfile(JAKE_MARTINEZ_UID);
+            
+            chats.push({
+              id: jakeChatId,
+              participantIds: jakeChatData.participantIds || [],
+              participantNames: {
+                ...jakeChatData.participantNames,
+                [JAKE_MARTINEZ_UID]: jakeProfile?.displayName || jakeProfile?.name || 'Jake Martinez'
+              },
+              lastMessage: jakeChatData.lastMessage,
+              isTestChat: false,
+              unreadCount: jakeChatData.unreadCount || 0,
             });
           }
+        }
       }
     }
     return chats;
@@ -212,9 +276,11 @@ export async function sendMessage(
     });
     return true;
   } catch (error) {
-    console.error('Error sending message:', error);
-    if (error instanceof Error && 'code' in error && (error as any).code?.startsWith('invalid-argument')) {
-        console.error('Firebase invalid argument details (messageData):', JSON.stringify(messageData, null, 2));
+    if (__DEV__) {
+      console.error('Error sending message:', error);
+      if (error instanceof Error && 'code' in error && (error as any).code?.startsWith('invalid-argument')) {
+          console.error('Firebase invalid argument details (messageData):', JSON.stringify(messageData, null, 2));
+      }
     }
     return false;
   }
@@ -372,23 +438,55 @@ export async function toggleReactionOnMessage(
   }
 }
 
-export async function cleanupTestChat(): Promise<boolean> {
-  if (!__DEV__) {
-    console.warn('Test data cleanup is only available in development mode.');
-    return false;
-  }
+export async function ensureJakeChatExists(): Promise<string | null> {
+  // Helper function to ensure Jake chat exists for current user
+  return await initializeJakeChat();
+}
+
+/**
+ * Create a chat between two matched users
+ * @param currentUserId Current user ID
+ * @param matchedUserId Matched user ID
+ * @returns Promise with chat ID
+ */
+export async function createMatchChat(currentUserId: string, matchedUserId: string): Promise<string | null> {
   try {
-    const messagesRef = collection(db, `chats/${TEST_CHAT_ID}/messages`);
-    const messagesSnapshot = await getDocs(messagesRef);
-    const batch = writeBatch(db);
-    messagesSnapshot.forEach((messageDoc) => batch.delete(messageDoc.ref));
-    const chatRef = doc(db, 'chats', TEST_CHAT_ID);
-    batch.delete(chatRef);
-    await batch.commit();
-    console.log('Test chat cleaned up successfully.');
-    return true;
+    const chatId = generateChatId(currentUserId, matchedUserId);
+    const chatDocRef = doc(db, 'chats', chatId);
+    const chatDocSnap = await getDoc(chatDocRef);
+
+    if (!chatDocSnap.exists()) {
+      // Get both user profiles
+      const [currentUserProfile, matchedUserProfile] = await Promise.all([
+        getUserProfile(currentUserId),
+        getUserProfile(matchedUserId)
+      ]);
+
+      if (!currentUserProfile || !matchedUserProfile) {
+        console.error('Could not fetch user profiles for match chat creation');
+        return null;
+      }
+
+      // Create the chat
+      await setDoc(chatDocRef, {
+        participantIds: [currentUserId, matchedUserId],
+        participantNames: {
+          [currentUserId]: currentUserProfile.displayName || currentUserProfile.name || 'User',
+          [matchedUserId]: matchedUserProfile.displayName || matchedUserProfile.name || 'User'
+        },
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        isMatchChat: true, // Mark as match-based chat
+      });
+
+      console.log('Match chat created successfully with ID:', chatId);
+    } else {
+      console.log('Chat between matched users already exists:', chatId);
+    }
+    
+    return chatId;
   } catch (error) {
-    console.error('Error cleaning up test chat:', error);
-    return false;
+    console.error('Error creating match chat:', error);
+    return null;
   }
 }

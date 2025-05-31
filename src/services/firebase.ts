@@ -14,6 +14,41 @@ import {
   FIREBASE_MEASUREMENT_ID
 } from '@env';
 
+// Validate required environment variables
+const validateFirebaseConfig = () => {
+  const requiredVars = {
+    FIREBASE_API_KEY,
+    FIREBASE_AUTH_DOMAIN,
+    FIREBASE_PROJECT_ID,
+    FIREBASE_STORAGE_BUCKET,
+    FIREBASE_MESSAGING_SENDER_ID,
+    FIREBASE_APP_ID,
+  };
+
+  const missingVars = Object.entries(requiredVars)
+    .filter(([_, value]) => !value)
+    .map(([key]) => key);
+
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required Firebase environment variables: ${missingVars.join(', ')}`);
+  }
+
+  // Validate API key format (should start with AIza)
+  if (!FIREBASE_API_KEY.startsWith('AIza')) {
+    throw new Error('Invalid Firebase API key format');
+  }
+
+  // Validate project ID format (should be alphanumeric with hyphens)
+  if (!/^[a-z0-9-]+$/.test(FIREBASE_PROJECT_ID)) {
+    throw new Error('Invalid Firebase project ID format');
+  }
+
+  return true;
+};
+
+// Validate configuration before use
+validateFirebaseConfig();
+
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
@@ -31,9 +66,13 @@ let app;
 try {
   // Try to get existing app instance first
   app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-  console.log('Firebase app initialized or retrieved successfully');
+  if (__DEV__) {
+    console.log('Firebase app initialized or retrieved successfully');
+  }
 } catch (error) {
-  console.error('Error during Firebase app initialization:', error);
+  if (__DEV__) {
+    console.error('Error during Firebase app initialization:', error);
+  }
   // Fallback to initializing a new app
   app = initializeApp(firebaseConfig);
 }
@@ -57,12 +96,13 @@ const storageOptions = {
 
 try {
   // First, try with explicit bucket and region
-  console.log('Initializing Firebase Storage with explicit bucket...');
+  if (__DEV__) {
+    console.log('Initializing Firebase Storage with explicit bucket...');
+  }
   storage = getStorage(app, `gs://${firebaseConfig.storageBucket}`);
-  console.log('Firebase Storage initialized successfully with explicit bucket');
-  
-  // Log the storage bucket for verification
-  console.log(`Current storage bucket: ${(storage as any)._bucket || 'unknown'}`);
+  if (__DEV__) {
+    console.log('Firebase Storage initialized successfully with explicit bucket');
+  }
   
   // Check if we're in development/emulator mode
   if (__DEV__ && process.env.USE_FIREBASE_EMULATOR === 'true') { // Set USE_FIREBASE_EMULATOR=true in .env to use emulator
@@ -70,14 +110,20 @@ try {
     console.log('Connected to Firebase Storage emulator');
   }
 } catch (storageError) {
-  console.error('Error initializing Firebase Storage with explicit bucket:', storageError);
+  if (__DEV__) {
+    console.error('Error initializing Firebase Storage with explicit bucket:', storageError);
+  }
   
   try {
     // Fallback to default initialization
     storage = getStorage(app);
-    console.log('Firebase Storage initialized with default configuration');
+    if (__DEV__) {
+      console.log('Firebase Storage initialized with default configuration');
+    }
   } catch (fallbackError) {
-    console.error('All Firebase Storage initialization attempts failed');
+    if (__DEV__) {
+      console.error('All Firebase Storage initialization attempts failed');
+    }
     // Create a dummy storage instance to prevent app crashes
     // The app will show appropriate errors when trying to upload
     storage = getStorage();

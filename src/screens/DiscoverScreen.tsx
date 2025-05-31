@@ -33,6 +33,8 @@ import { fetchTodayLikes } from '../store/likesSlice';
 import { ThemeProps } from '../utils/styled-components';
 import { CachedImage } from '../components/CachedImage';
 import { prefetchManager } from '../services/cache/prefetchManager';
+import { AnimatedLikeButton } from '../components/AnimatedLikeButton';
+import { createLike, createDislike } from '../services/likesService';
 
 // Create a new QueryClient instance
 const queryClient = new QueryClient();
@@ -222,14 +224,48 @@ function DiscoverScreen() {
   }, [currentProfileIndex, profiles.length, isLoading, isLoadingNext, hasMore, fetchNextPage, fadeAnim, resetProfiles]);
   
   // Handle the dismiss button press
-  const handleDismiss = () => {
-    goToNextProfile();
+  const handleDismiss = async () => {
+    if (!currentProfile || !currentUid) return;
+    
+    try {
+      // Record the dislike in Firebase
+      await createDislike(currentUid, currentProfile.id);
+      // Move to next profile
+      goToNextProfile();
+    } catch (error) {
+      console.error('Error recording dislike:', error);
+      // Still move to next profile even if recording fails
+      goToNextProfile();
+    }
   };
   
-  // Handle the like button press
-  const handleLike = () => {
-    if (!currentProfile) return;
-    initiateProfileLike(currentProfile.id);
+  // Handle the like button press  
+  const handleLike = async () => {
+    if (!currentProfile || !currentUid) return;
+    
+    // Check if we need to show text modal based on like count
+    const likeRequirement = todayLikeCount === 0 ? 'none' : 
+                           todayLikeCount === 1 ? 'text' : 
+                           'video';
+    
+    if (likeRequirement === 'none') {
+      // Direct like without additional requirements
+      try {
+        await createLike(currentUid, currentProfile.id);
+        // Update Redux store for like count
+        dispatch(fetchTodayLikes(currentUid) as any);
+        // Move to next profile after animation
+        setTimeout(() => {
+          goToNextProfile();
+        }, 500);
+      } catch (error) {
+        console.error('Error creating like:', error);
+        Alert.alert('Error', 'Failed to like profile. Please try again.');
+      }
+    } else {
+      // Show modal for text/video requirement
+      initiateProfileLike(currentProfile.id);
+    }
   };
   
   // Handle submitting a text-based like
@@ -241,7 +277,13 @@ function DiscoverScreen() {
     
     const success = await submitTextLike();
     if (success) {
-      goToNextProfile();
+      // Update Redux store for like count
+      dispatch(fetchTodayLikes(currentUid) as any);
+      // Close modal and navigate to next profile
+      setIsLikeModalVisible(false);
+      setTimeout(() => {
+        goToNextProfile();
+      }, 300);
     }
   };
   
@@ -377,15 +419,11 @@ function DiscoverScreen() {
           <ActionButtonText>✕</ActionButtonText>
         </ActionButton>
         
-        <ActionButton 
+        <AnimatedLikeButton 
           onPress={handleLike}
           testID="like-button"
-          accessibilityLabel="Like profile"
-          accessibilityRole="button"
-          primary
-        >
-          <ActionButtonText>❤️</ActionButtonText>
-        </ActionButton>
+          size={64}
+        />
         
         {/* Optional Super Like button (placeholder) */}
         <ActionButton 

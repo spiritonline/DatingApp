@@ -123,6 +123,16 @@ export function PromptEditor({
   
   // Handle removing a prompt answer
   const handleRemovePrompt = (promptId: string) => {
+    // Check if removing this prompt would go below minimum
+    if (prompts.length <= 3) {
+      Alert.alert(
+        'Minimum Prompts Required',
+        'You must have at least 3 prompts on your profile. Please add another prompt before removing this one.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
     Alert.alert(
       'Remove Prompt',
       'Are you sure you want to remove this prompt?',
@@ -220,9 +230,23 @@ export function PromptEditor({
   
   return (
     <Container>
+      {/* Minimum prompts indicator */}
+      {prompts.length < 3 && (
+        <MinimumPromptsText isDark={isDark}>
+          {prompts.length === 0 
+            ? 'Add at least 3 prompts to complete your profile'
+            : `Add ${3 - prompts.length} more prompt${3 - prompts.length > 1 ? 's' : ''} (minimum 3 required)`
+          }
+        </MinimumPromptsText>
+      )}
+      
       {/* Existing prompts - directly render instead of using FlatList */}
       {prompts.length > 0 ? (
-        prompts.map(item => renderPromptItem({ item }))
+        prompts.map(item => (
+          <React.Fragment key={item.id}>
+            {renderPromptItem({ item })}
+          </React.Fragment>
+        ))
       ) : (
         <EmptyText isDark={isDark}>No prompts added yet</EmptyText>
       )}
@@ -424,4 +448,14 @@ const EmptyText = styled.Text<ThemeProps>`
   color: ${(props: ThemeProps) => props.isDark ? '#888888' : '#999999'};
   text-align: center;
   padding: 16px;
+`;
+
+const MinimumPromptsText = styled.Text<ThemeProps>`
+  font-size: 14px;
+  color: ${(props: ThemeProps) => props.isDark ? '#FF6B6B' : '#FF6B6B'};
+  text-align: center;
+  padding: 12px;
+  margin-bottom: 8px;
+  background-color: ${(props: ThemeProps) => props.isDark ? 'rgba(255, 107, 107, 0.1)' : 'rgba(255, 107, 107, 0.1)'};
+  border-radius: 8px;
 `;

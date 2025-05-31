@@ -123,8 +123,7 @@ jest.mock('firebase/firestore', () => ({
 // Mock your custom services
 jest.mock('../src/services/chatService', () => ({
   getUserChats: jest.fn(),
-  initializeTestChat: jest.fn(),
-  isTestUser: jest.fn().mockReturnValue(true),
+  initializeJakeChat: jest.fn(),
 }));
 
 // Mock other services as needed

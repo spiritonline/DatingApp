@@ -72,30 +72,6 @@ export const PlanDateButton = styled.TouchableOpacity`
   background-color: #FF6B6B;
 `;
 
-export const CleanupButton = styled.TouchableOpacity`
-  padding: 8px 12px;
-  border-radius: 16px;
-  background-color: #FF9800;
-`;
-
-export const CleanupButtonText = styled.Text`
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: bold;
-`;
-
-export const TestChatBadge = styled.View`
-  background-color: #4CAF50;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-top: 4px;
-`;
-
-export const TestChatBadgeText = styled.Text`
-  color: white;
-  font-size: 10px;
-  font-weight: bold;
-`;
 
 export const PlanDateButtonText = styled.Text`
   color: #ffffff;

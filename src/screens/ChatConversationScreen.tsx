@@ -20,8 +20,6 @@ import {
   sendMessage as sendChatMessage,
   subscribeToMessages,
   markMessagesAsRead,
-  isTestUser,
-  cleanupTestChat,
   toggleReactionOnMessage,
   SendMessagePayload,
   ChatServiceMessage,
@@ -47,10 +45,6 @@ import {
   BackButtonText,
   HeaderTitle,
   PlanDateButton,
-  CleanupButton,
-  CleanupButtonText,
-  TestChatBadge,
-  TestChatBadgeText,
   PlanDateButtonText,
   MessagesContainer,
   EmptyContainer,
@@ -73,7 +67,6 @@ export default function ChatConversationScreen() {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [isTestChatScreen, setIsTestChatScreen] = useState(false);
 
   const [reactionModalVisible, setReactionModalVisible] = useState(false);
   const [selectedMessageForReaction, setSelectedMessageForReaction] = useState<UIMessage | null>(null);
@@ -107,11 +100,16 @@ export default function ChatConversationScreen() {
   const replyPanelAnimHeight = useSharedValue(0);
   const replyPanelAnimOpacity = useSharedValue(0);
 
-  const animatedReplyPanelStyle = useAnimatedStyle(() => {
+  const animatedReplyPanelHeightStyle = useAnimatedStyle(() => {
     return {
       height: replyPanelAnimHeight.value,
-      opacity: replyPanelAnimOpacity.value,
       overflow: 'hidden',
+    };
+  });
+
+  const animatedReplyPanelOpacityStyle = useAnimatedStyle(() => {
+    return {
+      opacity: replyPanelAnimOpacity.value,
     };
   });
 
@@ -120,8 +118,6 @@ export default function ChatConversationScreen() {
         setIsLoading(false);
         return;
     }
-    const isTest = chatId.startsWith('testChat_');
-    setIsTestChatScreen(isTest);
     markMessagesAsRead(chatId).catch(error => console.error('Error marking messages as read:', error));
     const unsubscribe = subscribeToMessages(chatId, (serviceMessages: ChatServiceMessage[]) => {
       const uiMessages: UIMessage[] = serviceMessages.map(msg => ({
@@ -180,23 +176,6 @@ export default function ChatConversationScreen() {
 
   const formatTime = useCallback((date: Date) => !date ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), []);
 
-  const handleCleanupTestChat = useCallback(async () => {
-    // ... (implementation remains the same)
-    if (!isTestChatScreen) return;
-    Alert.alert('Clean Test Chat', 'Delete all messages?',
-      [{ text: 'Cancel', style: 'cancel' },
-       { text: 'Delete', style: 'destructive', onPress: async () => {
-            try {
-              if (await cleanupTestChat()) {
-                Alert.alert('Success', 'Test chat cleaned.');
-                navigation.goBack();
-              } else Alert.alert('Error', 'Failed to clean.');
-            } catch (e) { console.error(e); Alert.alert('Error', 'Cleanup failed.'); }
-          },
-        },
-      ]
-    );
-  }, [isTestChatScreen, navigation]);
 
   const handleSwipeReply = useCallback((message: UIMessage) => {
     setReplyToMessage(message);
@@ -376,8 +355,8 @@ export default function ChatConversationScreen() {
     <Container isDark={isDark} testID="chat-conversation-screen">
       <HeaderContainer isDark={isDark} style={{ marginTop: Platform.OS === 'ios' ? 10 : 0 }}>
         <BackButton onPress={() => navigation.goBack()} testID="back-button"><BackButtonText isDark={isDark}>←</BackButtonText></BackButton>
-        <HeaderContent><HeaderTitle isDark={isDark}>{partnerName}</HeaderTitle>{isTestChatScreen && <TestChatBadge testID="test-chat-badge"><TestChatBadgeText>TEST CHAT</TestChatBadgeText></TestChatBadge>}</HeaderContent>
-        {isTestChatScreen && isTestUser() ? <CleanupButton onPress={handleCleanupTestChat} testID="cleanup-test-chat"><CleanupButtonText>Reset Chat</CleanupButtonText></CleanupButton> : <PlanDateButton onPress={() => {}}><PlanDateButtonText>Plan Date</PlanDateButtonText></PlanDateButton>}
+        <HeaderContent><HeaderTitle isDark={isDark}>{partnerName}</HeaderTitle></HeaderContent>
+        <PlanDateButton onPress={() => {}}><PlanDateButtonText>Plan Date</PlanDateButtonText></PlanDateButton>
       </HeaderContainer>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
@@ -398,7 +377,8 @@ export default function ChatConversationScreen() {
           isDark={isDark}
           replyToMessage={replyToMessage}
           onCancelReply={() => setReplyToMessage(null)}
-          animatedReplyPanelStyle={animatedReplyPanelStyle}
+          animatedReplyPanelHeightStyle={animatedReplyPanelHeightStyle}
+          animatedReplyPanelOpacityStyle={animatedReplyPanelOpacityStyle}
           getDisplayNameForReply={getDisplayNameForReply}
           truncateText={truncateText}
           REPLY_PREVIEW_MAX_LENGTH={REPLY_PREVIEW_MAX_LENGTH}

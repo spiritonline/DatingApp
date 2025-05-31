@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { NavigationController } from './src/navigation/NavigationController';
-import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
 export default function App() {  
   return (
